@@ -1,10 +1,9 @@
-# Things to Implement
+#i Things to Implement
 
 - An RPKI infrastructure for the simulator. *Also RPKI is implemented simple in the paper*
-- If there are additional security mechanisms already adopted with 45% similar to RPKI then we need to implement thoose as well
 - Two of the path-plausability algorithms, ASPA and AS-Cones (both of them uses RPKI) *Exactly as in the drafts*
 - IETF draft for classification of route leak scenarios [Methods for Detection and Mitigaiton of BGP Route Leaks](https://datatracker.ietf.org/doc/draft-ietf-grow-route-leak-detection-mitigation/09/)
-  - For ASPA there are already implementations available, CA-sofware Krill, RP-software Routinator, OctoRPKI, etc.
+- For ASPA there are already implementations available, CA-sofware Krill, RP-software Routinator, OctoRPKI, etc.
 - As an addition to paper we can implement the BGPsec protocol
 - A simulation framework/engine for conducting these type of research, that considers following features
   - High scalability (novelties usually occurs from this, lack of scalability)
@@ -37,7 +36,10 @@ Generally it seems that overall research field is focused on security of BGP pro
 
 Also another research highly influenced by the CURE is [Byzantine-Secure Relying Party for Resilient RPKI](https://www.semanticscholar.org/paper/Byzantine-Secure-Relying-Party-for-Resilient-RPKI-Friess-Mirdita/9f4812d7e8bf6ddeefe18c7dde80c90930571949) is also about RPKI security etc.
 
-By 
+**Contribution** They make the first proposal that significantly improves the resilence and security of RPKI. They develop Byzantine-secure relying party (BRP). In BRP the relying party nodes redundantly validate RPKI objects and arrive at a global consensus through a voting process. BRP provides an RPKI equivalent of public DNS, removing the need for networks to install, operate, and upgrade their own relying party instances while avoiding the need to trust operators of BRP nodes.
+
+**Experiments** We show through simulations and experimental evaluations
+that BRP, as an intermediate RPKI service, results in less load on RPKI publication points and a robust output despite RPKI repository failures, jitter, and attacks. We engineer BRP to be fully backward compatible and readily deployable - it does not require any changes to the border routers and the RPKI repositories. BRP enables independent verification by users of its correct operation.
 
 ## How simualtions will be done?
 
@@ -47,3 +49,5 @@ Using multiple virtual machines?
 ## Alternatives
 
 - Megalos: A Scalable Architecture for the Virtualization of Large Network Scenarios [Scazzariello 2021 et al.]
+
+## 
