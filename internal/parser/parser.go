@@ -53,6 +53,15 @@ func (p *Parser) check(e error) {
 	}
 }
 
+func (p *Parser) isBlacklisted(line string) bool {
+	for _, token := range p.BlacklistTokens {
+		if strings.Contains(line, token) {
+			return true
+		}
+	}
+	return false
+}
+
 // Parse the line that contains AS relations, types protocols dates etc.
 func (p *Parser) parseLine(line string) (TopologySource, error) {
 	parts := strings.Split(line, "|")
