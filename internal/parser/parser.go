@@ -53,6 +53,15 @@ func (p *Parser) check(e error) {
 	}
 }
 
+func (p *Parser) isBlacklisted(line string) bool {
+	for _, token := range p.BlacklistTokens {
+		if strings.Contains(line, token) {
+			return true
+		}
+	}
+	return false
+}
+
 // Parse the line that contains AS relations, types protocols dates etc.
 func (p *Parser) parseLine(line string) (TopologySource, error) {
 	parts := strings.Split(line, "|")
@@ -97,20 +106,20 @@ func (p *Parser) Parse() {
 	// Keeping the skipped lines statistics
 	skipped := 0
 
-	// Only do operations on the lines that does not contain blacklisted tokens
+	// Only do operations on the lines that do not contain blacklisted tokens
 	for _, line := range lines {
-		for _, token := range p.BlacklistTokens {
-			if strings.Contains(line, token) {
-				skipped++
-				continue
-			} else {
-				source, err := p.parseLine(line)
-				p.check(err)
-				fmt.Printf("source: %v\n", source)
-			}
+		if p.isBlacklisted(line) {
+			skipped++
+			continue
 		}
+
+		source, err := p.parseLine(line)
+		if err != nil {
+			fmt.Printf("error parsing line: %v\n", err)
+			continue
+		}
+		fmt.Printf("source: %v\n", source)
 	}
 
-	fmt.Printf("skipped %d lines", skipped)
-
+	fmt.Printf("skipped %d lines\n", skipped)
 }
