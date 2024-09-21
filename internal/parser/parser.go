@@ -23,10 +23,8 @@ package parser
 //		5.2) Random with max-threshold
 
 import (
-	// "bufio"
-	// "io"
+	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 )
@@ -35,7 +33,7 @@ import (
 type Parser struct {
 	AsRelFilePath   string
 	Data            []byte
-	BlacklistTokens []string
+	BlacklistTokens map[string]struct{}
 }
 
 type TopologySource struct {
@@ -47,19 +45,18 @@ type TopologySource struct {
 
 // Helper function for checking errors, will streamline error checks since it is major
 // when dealing with file io operations
-func (p *Parser) check(e error) {
-	if e != nil {
-		panic(e)
+func (p *Parser) check(err error) {
+	if err != nil {
+		fmt.Println("error:", err)
+		return // or handle the error gracefully
 	}
 }
 
+// Creates a map of string to empty struct, for constant time lookups
+// considering the blacklist might grow large
 func (p *Parser) isBlacklisted(line string) bool {
-	for _, token := range p.BlacklistTokens {
-		if strings.Contains(line, token) {
-			return true
-		}
-	}
-	return false
+	_, ok := p.BlacklistTokens[line]
+	return ok
 }
 
 // Parse the line that contains AS relations, types protocols dates etc.
@@ -68,9 +65,6 @@ func (p *Parser) parseLine(line string) (TopologySource, error) {
 	if len(parts) != 4 {
 		return TopologySource{}, fmt.Errorf("invalid line: %s", line)
 	}
-
-	fmt.Printf("parts: %v\n", parts)
-
 	return TopologySource{
 		Type:     parts[0],
 		Protocol: parts[1],
@@ -81,20 +75,44 @@ func (p *Parser) parseLine(line string) (TopologySource, error) {
 
 // Reading line-by-line intially for preparing the file to validating, sanity checks and
 // configurations stesp
+// func (p *Parser) Slurp() {
+// 	// Open
+// 	file, err := os.Open(p.AsRelFilePath)
+// 	p.check(err)
+
+// 	// Ensuring file is properly clsoed when the function exits, regardless of the error
+// 	// later in the function.
+// 	defer file.Close()
+
+// 	// Read all the bytes from the file, data here is byte slice []byte holds the
+// 	// entire content of the file. ReadAll reads all the bytes until EOF
+// 	p.Data, err = io.ReadAll(file)
+// 	p.check(err)
+// 	fmt.Printf("bytes read %d from file %s", len(p.Data), p.AsRelFilePath)
+// }
+
+// If the processed files are very large, using io.ReadAll might not be optimal as
+// it reads the entire file into memory at once. Instead, processing the file line
+// by line using a scanner
 func (p *Parser) Slurp() {
-	// Open
 	file, err := os.Open(p.AsRelFilePath)
 	p.check(err)
-
-	// Ensuring file is properly clsoed when the function exits, regardless of the error
-	// later in the function.
 	defer file.Close()
 
-	// Read all the bytes from the file, data here is byte slice []byte holds the
-	// entire content of the file. ReadAll reads all the bytes until EOF
-	p.Data, err = io.ReadAll(file)
-	p.check(err)
-	fmt.Printf("bytes read %d from file %s", len(p.Data), p.AsRelFilePath)
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !p.isBlacklisted(line) {
+			_, err := p.parseLine(line)
+			if err != nil {
+				fmt.Printf("error parsing line: %v\n", err)
+			}
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		p.check(err)
+	}
 }
 
 // Parse the data read from the file, this is the main function that will be called
