@@ -21,3 +21,6 @@ go.work
 
 # Ignoring data temporarly
 data/
+
+# Ignore unecessary documentations
+docs/instructions.md

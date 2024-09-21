@@ -1,7 +1,16 @@
 package main
 
-import "fmt"
+import (
+	"rstk/internal/parser"
+)
 
 func main() {
-	fmt.Println("Hello, World!")
+
+	p := parser.Parser{
+		AsRelFilePath:   "data/serial-2/20151201.as-rel2.txt",
+		BlacklistTokens: []string{"#"},
+	}
+
+	p.Slurp()
+	p.Parse()
 }
