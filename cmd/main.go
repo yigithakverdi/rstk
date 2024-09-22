@@ -12,11 +12,29 @@ func main() {
 		BlacklistTokens: []string{"#"},
 	}
 
-	err := parser.ParseFile()
-	if err != nil {
-		fmt.Println("Failed to parse file:", err)
-	} else {
-		graph.MapAsToAdjacencyRelation(parser.AsRelationships)
+	// AS number
+	as_number := 1
+
+	// Parse the file and store the relationships in the parser struct
+	parser.ParseFile()
+
+	// Populate the graph with the relationships
+	graph := graph.PopulateGraph(parser.AsRelationships)
+
+	// Using the graph created, test AS neighbor relationships
+	customer, peers, providers := graph.GetNeighbors(as_number)
+
+	fmt.Printf("AS %d neighbors\n", as_number)
+	printNeighbors := func(label string, neighbors []int) {
+		fmt.Printf("%s: ", label)
+		if len(neighbors) > 10 {
+			fmt.Printf("%v... and %d more\n", neighbors[:10], len(neighbors)-10)
+		} else {
+			fmt.Println(neighbors)
+		}
 	}
 
+	printNeighbors("Customers", customer)
+	printNeighbors("Peers", peers)
+	printNeighbors("Providers", providers)
 }

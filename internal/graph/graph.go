@@ -12,7 +12,64 @@ const (
 	Peer     Relation = 0
 )
 
-type Graph map[int]map[int]int
+// Two different Graph types, one for the direct relationships and one for the
+// reverse relationships of holding customer and provider both ways to make it
+// efficient to read
+type Graph struct {
+	Direct  map[int]map[int]int
+	Reverse map[int]map[int]int
+}
+
+// NewGraph creates a new graph with empty maps for direct and reverse relationships
+func NewGraph() Graph {
+	return Graph{
+		Direct:  make(map[int]map[int]int),
+		Reverse: make(map[int]map[int]int),
+	}
+}
+
+// PopulateGraph takes a slice of AsRel objects and constructs a Graph.
+// It initializes the graph with direct and reverse relationships based on the type of relationship
+// (Customer or Peer) between AS (Autonomous Systems) entities.
+// - Customer relationships are added to both direct and reverse graphs.
+// - Peer relationships are added bidirectionally to both direct and reverse graphs.
+// The function returns the populated Graph.
+func PopulateGraph(asRels []parser.AsRel) Graph {
+	graph := NewGraph()
+	for _, rel := range asRels {
+		as1 := rel.AS1
+		as2 := rel.AS2
+		relation := rel.Relation
+
+		// Ensuring entries exist in both graphs
+		if graph.Direct[as1] == nil {
+			graph.Direct[as1] = make(map[int]int)
+		}
+		graph.Direct[as1][as2] = relation
+
+		// For reverse relationships (-1)
+		if relation == int(Customer) {
+			if graph.Reverse[as2] == nil {
+				graph.Reverse[as2] = make(map[int]int)
+			}
+			graph.Reverse[as2][as1] = relation
+		}
+
+		// Handle peer relationships bidirectionally (0)
+		if relation == int(Peer) {
+			if graph.Direct[as2] == nil {
+				graph.Direct[as2] = make(map[int]int)
+			}
+			graph.Direct[as2][as1] = relation
+
+			if graph.Reverse[as1] == nil {
+				graph.Reverse[as1] = make(map[int]int)
+			}
+			graph.Reverse[as1][as2] = relation
+		}
+	}
+	return graph
+}
 
 func MapAsToAdjacencyRelation(asRels []parser.AsRel) {
 	relationships := make(map[int][]int)
@@ -24,55 +81,27 @@ func MapAsToAdjacencyRelation(asRels []parser.AsRel) {
 	fmt.Println(relationships)
 }
 
-// Populates a graph by iterating over the list of AS relationships and adding
-// the relationships to the graph. If the relationship is a peer relationship,
-// it adds the reverse direction as well. In the end it returns something like
-// map[int]map[int]int{1: {2: 0}, 2: {1: 0}} with 1 being a peer of 2 and 2 being
-// a peer of 1
-func PopulateGraph(asRels []parser.AsRel) Graph {
-	graph := make(Graph)
-	for _, rel := range asRels {
-		as1 := rel.AS1
-		as2 := rel.AS2
-		relation := rel.Relation
-
-		// Ensure the graph has an entry for AS1
-		if graph[as1] == nil {
-			graph[as1] = make(map[int]int)
-		}
-
-		// No need to cast relation since it is already an int
-		graph[as1][as2] = relation
-
-		// If it's a peer relationship, add the reverse direction
-		// Assuming 0 represents a peer relationship from the description of
-		// CAIDA datatset
-		if relation == 0 {
-			if _, ok := graph[as2]; !ok {
-				graph[as2] = make(map[int]int)
-			}
-			graph[as2][as1] = relation
-		}
-	}
-	return graph
-}
-
-// Check is AS exists in the graph, if exists then llops over it's neighbors that is
-// stored in the value of that AS, then by checking each ASes relation in the list of
-// obtain values of the AS, it appends to three different slices based on the relation
-// note that by default the relation is 1, so if the relation is 1 then it is a provider
-func GetNeighbors(graph Graph, asNumber int) (customers, peers, providers []int) {
-	if neighbors, exists := graph[asNumber]; exists {
+// GetNeighbors returns the customers, peers, and providers of a given AS (Autonomous System) number.
+// It first looks up the direct neighbors and classifies them based on their relationship (customer or peer).
+// Then, it efficiently finds the providers using the reverse graph.
+func (g Graph) GetNeighbors(asNumber int) (customers, peers, providers []int) {
+	if neighbors, exists := g.Direct[asNumber]; exists {
 		for neighbor, relation := range neighbors {
-			switch Relation(relation) {
-			case Customer:
+			switch relation {
+			case int(Customer): // -1
 				customers = append(customers, neighbor)
-			case Peer:
+			case int(Peer): // 0
 				peers = append(peers, neighbor)
-			default:
-				providers = append(providers, neighbor)
 			}
 		}
 	}
+
+	// Efficiently find providers using the reverse graph
+	if reverseNeighbors, exists := g.Reverse[asNumber]; exists {
+		for provider := range reverseNeighbors {
+			providers = append(providers, provider)
+		}
+	}
+
 	return customers, peers, providers
 }
