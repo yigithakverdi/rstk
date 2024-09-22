@@ -1,3 +1,7 @@
+// The 'serial-2' directory combines the 'serial-1' data with relationships
+// inferred from Ark traceroute data, and multi-lateral peering
+// https://catalog.caida.org/paper/2013_inferring_multilateral_peering.
+
 // To do this we first infer which AS owns each router independent of the
 // interface addresses observed at that router. The ownership inferences
 // are based on IP-to-AS mapping derived from public BGP data, list of
@@ -145,4 +149,9 @@ func (p *Parser) ParseFromString(data string) error {
 // Function to retrieve the parsed relationships
 func (p *Parser) GetParsedAsRels() []AsRel {
 	return p.AsRelationships
+}
+
+// Sanity checking single traceroute for a single AS
+func (p *Parser) SanityCheckSingleTraceroute(as int) error {
+	return nil
 }

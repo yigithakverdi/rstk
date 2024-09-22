@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"rstk/internal/graph"
 	"rstk/internal/parser"
 )
 
@@ -15,8 +16,7 @@ func main() {
 	if err != nil {
 		fmt.Println("Failed to parse file:", err)
 	} else {
-		asRels := parser.GetParsedAsRels()
-		fmt.Println("Parsed AS Relationships:", asRels)
+		graph.MapAsToAdjacencyRelation(parser.AsRelationships)
 	}
 
 }
