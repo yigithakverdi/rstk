@@ -20,6 +20,18 @@ type Graph struct {
 	Reverse map[int]map[int]int
 }
 
+// Node struct to represent an AS (Autonomous System) entity
+type Node struct {
+	ASNumber int
+	Customer []int
+	Peer     []int
+	Provider []int
+	Prefix   []string
+	Location string
+	Contacts []string
+	Rank     int
+}
+
 // NewGraph creates a new graph with empty maps for direct and reverse relationships
 func NewGraph() Graph {
 	return Graph{
@@ -41,36 +53,36 @@ func PopulateGraph(asRels []parser.AsRel) Graph {
 		as2 := rel.AS2
 		relation := rel.Relation
 
-		// Ensuring entries exist in both graphs
-		if graph.Direct[as1] == nil {
-			graph.Direct[as1] = make(map[int]int)
-		}
-		graph.Direct[as1][as2] = relation
+		switch relation {
+		case int(Customer):
 
-		// For reverse relationships (-1)
-		if relation == int(Customer) {
-			if graph.Reverse[as2] == nil {
-				graph.Reverse[as2] = make(map[int]int)
-			}
-			graph.Reverse[as2][as1] = relation
-		}
+			// Add edge from customer (AS2) to provider (AS1)
+			AddEdge(graph.Direct, as2, as1, relation)
 
-		// Handle peer relationships bidirectionally (0)
-		if relation == int(Peer) {
-			if graph.Direct[as2] == nil {
-				graph.Direct[as2] = make(map[int]int)
-			}
-			graph.Direct[as2][as1] = relation
+			// Optionally, add reverse edge from provider to customer
+			AddEdge(graph.Reverse, as1, as2, relation)
 
-			if graph.Reverse[as1] == nil {
-				graph.Reverse[as1] = make(map[int]int)
-			}
-			graph.Reverse[as1][as2] = relation
+		case int(Peer):
+
+			// For peer relationships, add bidirectional edges
+			AddEdge(graph.Direct, as1, as2, relation)
+			AddEdge(graph.Direct, as2, as1, relation)
+			AddEdge(graph.Reverse, as1, as2, relation)
+			AddEdge(graph.Reverse, as2, as1, relation)
 		}
 	}
 	return graph
 }
 
+// Helper function to add an edge to a graph
+func AddEdge(graph map[int]map[int]int, from int, to int, relation int) {
+	if graph[from] == nil {
+		graph[from] = make(map[int]int)
+	}
+	graph[from][to] = relation
+}
+
+// Helper function to map AS relationships to an adjacency relation
 func MapAsToAdjacencyRelation(asRels []parser.AsRel) {
 	relationships := make(map[int][]int)
 	for _, rel := range asRels {
@@ -88,9 +100,9 @@ func (g Graph) GetNeighbors(asNumber int) (customers, peers, providers []int) {
 	if neighbors, exists := g.Direct[asNumber]; exists {
 		for neighbor, relation := range neighbors {
 			switch relation {
-			case int(Customer): // -1
-				customers = append(customers, neighbor)
-			case int(Peer): // 0
+			case int(Customer):
+				providers = append(providers, neighbor)
+			case int(Peer):
 				peers = append(peers, neighbor)
 			}
 		}
@@ -99,7 +111,7 @@ func (g Graph) GetNeighbors(asNumber int) (customers, peers, providers []int) {
 	// Efficiently find providers using the reverse graph
 	if reverseNeighbors, exists := g.Reverse[asNumber]; exists {
 		for provider := range reverseNeighbors {
-			providers = append(providers, provider)
+			customers = append(customers, provider)
 		}
 	}
 
