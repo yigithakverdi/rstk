@@ -1,13 +1,37 @@
 package engine
 
-func generate_config() error {
-	return nil
+import (
+	"fmt"
+	"rstk/internal/graph"
+)
+
+type EdgeConfig struct {
+	Source      string
+	Destination string
+	Bandwidth   int
+	Latency     int
 }
 
-func start_simulation() error {
-	return nil
+type NodeConfig struct {
+	ID       string
+	IP       string
+	CPU      int
+	Memory   int
+	Protocol string
 }
 
-func stop_simulation() error {
-	return nil
+type GlobalConfig struct {
+	Nodes []NodeConfig
+	Edges []EdgeConfig
+}
+
+type TopologyConfig struct {
+	Depth           int
+	BranchingFactor int
+	Redundancy      bool
+}
+
+func GenerateTopology(g graph.Graph) {
+	fmt.Println("Generating topology...")
+
 }
