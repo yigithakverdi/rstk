@@ -1,7 +1,8 @@
 package main
 
 import (
-	"fmt"
+	// "fmt"
+	"rstk/internal/engine"
 	"rstk/internal/graph"
 	"rstk/internal/parser"
 )
@@ -12,29 +13,37 @@ func main() {
 		BlacklistTokens: []string{"#"},
 	}
 
-	// AS number
-	as_number := 1
-
 	// Parse the file and store the relationships in the parser struct
 	parser.ParseFile()
 
 	// Populate the graph with the relationships
-	graph := graph.PopulateGraph(parser.AsRelationships)
+	g := graph.PopulateGraph(parser.AsRelationships)
 
-	// Using the graph created, test AS neighbor relationships
-	customer, peers, providers := graph.GetNeighbors(as_number)
+	// AS number
+	asNumber := 1
 
-	fmt.Printf("AS %d neighbors\n", as_number)
-	printNeighbors := func(label string, neighbors []int) {
-		fmt.Printf("%s: ", label)
-		if len(neighbors) > 10 {
-			fmt.Printf("%v... and %d more\n", neighbors[:10], len(neighbors)-10)
-		} else {
-			fmt.Println(neighbors)
-		}
+	// // Using the graph created, test AS neighbor relationships
+	// customer, peers, providers := graph.GetNeighbors(as_number)
+
+	// fmt.Printf("AS %d neighbors\n", as_number)
+	// printNeighbors := func(label string, neighbors []int) {
+	// 	fmt.Printf("%s: ", label)
+	// 	if len(neighbors) > 10 {
+	// 		fmt.Printf("%v... and %d more\n", neighbors[:10], len(neighbors)-10)
+	// 	} else {
+	// 		fmt.Println(neighbors)
+	// 	}
+	// }
+
+	// printNeighbors("Customers", customer)
+	// printNeighbors("Peers", peers)
+	// printNeighbors("Providers", providers)
+
+	topologyConfig := engine.TopologyConfig{
+		Depth:           2,
+		BranchingFactor: 1,
+		Redundancy:      false,
 	}
 
-	printNeighbors("Customers", customer)
-	printNeighbors("Peers", peers)
-	printNeighbors("Providers", providers)
+	engine.GenerateTopology(asNumber, g, topologyConfig)
 }
