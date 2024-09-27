@@ -3,52 +3,28 @@ package main
 import (
 	"log"
 	"rstk/internal/engine"
-	"rstk/internal/engine/manager"
-
-	"rstk/internal/graph"
-	"rstk/internal/parser"
 )
 
 func main() {
-	parser := parser.Parser{
-		AsRelFilePath:   "data/serial-2/20151201.as-rel2.txt",
-		BlacklistTokens: []string{"#"},
-	}
+	// Initialize the graph from AS relationships
+	g := engine.InitializeGraph("data/serial-2/20151201.as-rel2.txt", []string{"#"})
 
-	// Initializing the manager package
-	manager.Init()
+	// Initialize the simulation configuration
+	simulationConfig := engine.InitializeSimulationConfig()
 
-	// Parse the file and store the relationships in the parser struct
-	parser.ParseFile()
-
-	// Populate the graph with the relationships
-	g := graph.PopulateGraph(parser.AsRelationships)
-
-	// AS number
-	asNumber := 1
-
-	// Topology configurations
-	topologyConfig := engine.TopologyConfig{
-		Depth:           2,
-		BranchingFactor: 1,
-		Redundancy:      false,
-	}
-
-	// Simulation configurations
-	simulationConfig := engine.SimulationConfig{
-		Global:       engine.GlobalConfig{},
-		SimulationID: engine.GenerateSimulationID(),
-	}
-
-	manager.CreateSimulationDirectory(simulationConfig.SimulationID)
-	configFilePath, err := manager.CreateKatharaConfigFile(simulationConfig.SimulationID)
-
+	// Set up simulation directory and config file
+	err := engine.SetupSimulationDirectory(&simulationConfig)
 	if err != nil {
-		log.Fatalf("Failed to create configuration file %s: %v", configFilePath, err)
+		log.Fatalf("Setup failed: %v", err)
 	}
 
-	simulationConfig.KatharaConfigPath = configFilePath
+	// Generate the topology for the simulation
+	asNumber := 1
+	topology := engine.GenerateTopology(asNumber, g, simulationConfig.Topology)
 
-	topology := engine.GenerateTopology(asNumber, g, topologyConfig)
-	engine.GenerateCollisionDomains(simulationConfig.KatharaConfigPath, topology)
+	// Generate and handle collision domains
+	err = engine.GenerateCollisionDomains(simulationConfig.KatharaConfigPath, topology)
+	if err != nil {
+		log.Fatalf("Failed to generate collision domains: %v", err)
+	}
 }
