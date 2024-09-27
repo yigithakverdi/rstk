@@ -21,14 +21,25 @@ type Graph struct {
 
 // Node struct to represent an AS (Autonomous System) entity
 type Node struct {
-	ASNumber int
-	Customer []int
-	Peer     []int
-	Provider []int
-	Prefix   []string
-	Location string
-	Contacts []string
-	Rank     int
+	ASNumber   int
+	Customer   []int
+	Peer       []int
+	Provider   []int
+	Prefix     []string
+	Location   string
+	Interfaces map[string]string
+	Contacts   []string
+	Rank       int
+}
+
+func (g *Graph) UpdateInterface(asInt int, interfaceName string, collisionDomain string) {
+	node, exists := g.Nodes[asInt]
+	if !exists {
+		fmt.Printf("Node %d does not exist\n", asInt)
+		return
+	}
+	node.Interfaces[interfaceName] = collisionDomain
+	g.Nodes[asInt] = node
 }
 
 // NewGraph creates a new graph with empty maps for direct and reverse relationships
@@ -89,7 +100,8 @@ func PopulateGraph(asRels []parser.AsRel) Graph {
 	return graph
 }
 
-// MapAsToAdjacencyRelation maps AS relationships to adjacency lists of customers, peers, and providers.
+// MapAsToAdjacencyRelation maps AS relationships to adjacency lists of customers,
+// peers, and providers.
 func MapAsToAdjacencyRelation(asRels []parser.AsRel) {
 	graph := PopulateGraph(asRels) // Assuming we call PopulateGraph first to construct the graph.
 

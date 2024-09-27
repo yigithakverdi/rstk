@@ -2,6 +2,8 @@ package engine
 
 import (
 	"fmt"
+	"log"
+	"rstk/internal/engine/manager"
 	"rstk/internal/graph"
 
 	"github.com/google/uuid"
@@ -36,9 +38,10 @@ type TopologyConfig struct {
 }
 
 type SimulationConfig struct {
-	Topology     TopologyConfig
-	Global       GlobalConfig
-	SimulationID string
+	Topology          TopologyConfig
+	Global            GlobalConfig
+	SimulationID      string
+	KatharaConfigPath string
 }
 
 // Function for generating a unique simulation ID using UUID.
@@ -51,6 +54,23 @@ func GenerateTopology(asNumber int, g graph.Graph, config TopologyConfig) map[in
 	topology := make(map[int]graph.Node)
 	traverseASMap(asNumber, config.Depth, config.BranchingFactor, visited, g, topology)
 	return topology
+}
+
+// Function for generating collision domains for the topology. It takes the simulation ID and the topology as input.
+// It iterates over each node in the topology and creates collision domains for each of its neighbors.
+func GenerateCollisionDomains(katharaConfigPath string, topology map[int]graph.Node) {
+	for _, node := range topology {
+		collisionDomains := manager.CreateCollisionDomains(node)
+
+		log.Printf("Collision domains for AS %d", node.ASNumber)
+		for domain := range collisionDomains {
+			log.Printf("%s", domain)
+		}
+		err := manager.WriteCollisionDomainsToKatharaConfigFile(katharaConfigPath, collisionDomains)
+		if err != nil {
+			log.Fatalf("Failed to write collision domains to file %s: %v", katharaConfigPath, err)
+		}
+	}
 }
 
 // A helper function to select up to N customers, N peers, and N providers from the node.
@@ -115,7 +135,7 @@ func traverseASMap(asNumber int, depthLimit int, branchFactor int, visited map[i
 	// Add the limited node to the topology
 	topology[asNumber] = limited
 
-	fmt.Printf("%+v\n", limited)
+	// fmt.Printf("%+v\n", limited)
 
 	// Recur for the limited customers, peers, and providers
 	for _, customer := range limited.Customer {
