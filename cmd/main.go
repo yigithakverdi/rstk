@@ -1,8 +1,10 @@
 package main
 
 import (
-	// "fmt"
+	"log"
 	"rstk/internal/engine"
+	"rstk/internal/engine/manager"
+
 	"rstk/internal/graph"
 	"rstk/internal/parser"
 )
@@ -13,6 +15,9 @@ func main() {
 		BlacklistTokens: []string{"#"},
 	}
 
+	// Initializing the manager package
+	manager.Init()
+
 	// Parse the file and store the relationships in the parser struct
 	parser.ParseFile()
 
@@ -22,28 +27,28 @@ func main() {
 	// AS number
 	asNumber := 1
 
-	// // Using the graph created, test AS neighbor relationships
-	// customer, peers, providers := graph.GetNeighbors(as_number)
-
-	// fmt.Printf("AS %d neighbors\n", as_number)
-	// printNeighbors := func(label string, neighbors []int) {
-	// 	fmt.Printf("%s: ", label)
-	// 	if len(neighbors) > 10 {
-	// 		fmt.Printf("%v... and %d more\n", neighbors[:10], len(neighbors)-10)
-	// 	} else {
-	// 		fmt.Println(neighbors)
-	// 	}
-	// }
-
-	// printNeighbors("Customers", customer)
-	// printNeighbors("Peers", peers)
-	// printNeighbors("Providers", providers)
-
+	// Topology configurations
 	topologyConfig := engine.TopologyConfig{
 		Depth:           2,
 		BranchingFactor: 1,
 		Redundancy:      false,
 	}
 
-	engine.GenerateTopology(asNumber, g, topologyConfig)
+	// Simulation configurations
+	simulationConfig := engine.SimulationConfig{
+		Global:       engine.GlobalConfig{},
+		SimulationID: engine.GenerateSimulationID(),
+	}
+
+	manager.CreateSimulationDirectory(simulationConfig.SimulationID)
+	configFilePath, err := manager.CreateKatharaConfigFile(simulationConfig.SimulationID)
+
+	if err != nil {
+		log.Fatalf("Failed to create configuration file %s: %v", configFilePath, err)
+	}
+
+	simulationConfig.KatharaConfigPath = configFilePath
+
+	topology := engine.GenerateTopology(asNumber, g, topologyConfig)
+	engine.GenerateCollisionDomains(simulationConfig.KatharaConfigPath, topology)
 }
