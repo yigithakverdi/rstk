@@ -1,0 +1,4 @@
+
+# IP addresses of the two network interfaces of r1
+ip addr add 10.0.0.1/24 dev eth0
+ip addr add 10.0.1.1/24 dev eth1

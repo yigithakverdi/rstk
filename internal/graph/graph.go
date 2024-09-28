@@ -27,18 +27,20 @@ type Node struct {
 	Provider   []int
 	Prefix     []string
 	Location   string
-	Interfaces map[string]string
+	Interfaces map[int]string
 	Contacts   []string
+	Subnets    map[string]int
 	Rank       int
+	Type       string
 }
 
-func (g *Graph) UpdateInterface(asInt int, interfaceName string, collisionDomain string) {
+func (g *Graph) UpdateInterface(asInt int, interfaceID int, collisionDomain string) {
 	node, exists := g.Nodes[asInt]
 	if !exists {
 		fmt.Printf("Node %d does not exist\n", asInt)
 		return
 	}
-	node.Interfaces[interfaceName] = collisionDomain
+	node.Interfaces[interfaceID] = collisionDomain
 	g.Nodes[asInt] = node
 }
 
