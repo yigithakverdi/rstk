@@ -27,4 +27,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to generate collision domains: %v", err)
 	}
+
+	// Generate startup files
+	err = engine.GenerateStartupFiles(simulationConfig.KatharaConfigPath, topology)
+	if err != nil {
+		log.Fatalf("Failed to generate startup files: %v", err)
+	}
 }

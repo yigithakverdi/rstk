@@ -84,6 +84,8 @@ func SetupSimulationDirectory(simulationConfig *SimulationConfig) error {
 	return nil
 }
 
+// Function for generating the topology for the simulation. It takes the AS number, graph, and topology
+// configuration as input.
 func GenerateTopology(asNumber int, g graph.Graph, config TopologyConfig) map[int]graph.Node {
 	visited := make(map[int]bool)
 	topology := make(map[int]graph.Node)
@@ -91,8 +93,9 @@ func GenerateTopology(asNumber int, g graph.Graph, config TopologyConfig) map[in
 	return topology
 }
 
-// Function for generating collision domains for the topology. It takes the simulation ID and the topology as input.
-// It iterates over each node in the topology and creates collision domains for each of its neighbors.
+// Function for generating collision domains for the topology. It takes the simulation ID and the
+// topology as input. It iterates over each node in the topology and creates collision domains
+// for each of its neighbors.
 func GenerateCollisionDomains(katharaConfigPath string, topology map[int]graph.Node) error {
 	for _, node := range topology {
 		collisionDomains := manager.CreateCollisionDomains(node)
@@ -106,6 +109,62 @@ func GenerateCollisionDomains(katharaConfigPath string, topology map[int]graph.N
 			log.Fatalf("Failed to write collision domains to file %s: %v", katharaConfigPath, err)
 		}
 	}
+	return nil
+}
+
+func GenerateStartupFiles(katharaConfigPath string, topology map[int]graph.Node) error {
+	subnetCounter := make(map[string]int) // Tracks subnet assignments
+	currentSubnetCounter := 0
+
+	// Assign unique subnet IDs to each collision domain
+	for _, node := range topology {
+		node1 := node.ASNumber
+		for _, neighbor := range append(append(node.Customer, node.Peer...), node.Provider...) {
+			node2 := neighbor
+
+			key := fmt.Sprintf("%d-%d", node1, node2)
+			reverseKey := fmt.Sprintf("%d-%d", node2, node1)
+
+			// If subnet is not assigned, assign a new one
+			_, exists := subnetCounter[key]
+			_, reverseExists := subnetCounter[reverseKey]
+			if !exists && !reverseExists {
+				subnetCounter[key] = currentSubnetCounter
+				subnetCounter[reverseKey] = currentSubnetCounter
+				currentSubnetCounter++
+			}
+		}
+	}
+
+	// Assign IP addresses and generate startup files for each router
+	for _, node := range topology {
+		startupCommands := []string{}
+
+		for ifaceID, connection := range node.Interfaces {
+			subnetID := subnetCounter[connection]
+			ipAddress := fmt.Sprintf("10.0.%d.%d/24", subnetID, ifaceID+1) // Assign IP based on interface ID
+
+			// Add the IP address assignment to the startup commands
+			startupCommands = append(startupCommands, fmt.Sprintf("ip addr add %s dev eth%d", ipAddress, ifaceID))
+
+			// Add routing rule to route traffic via this subnet (basic route setup)
+			startupCommands = append(startupCommands, fmt.Sprintf("ip route add 10.0.%d.0/24 via 10.0.%d.%d", subnetID, subnetID, ifaceID+1))
+		}
+
+		// Log the startup commands that are created
+		log.Printf("Startup commands for AS %d", node.ASNumber)
+		for _, command := range startupCommands {
+			log.Printf("- %s", command)
+		}
+
+		// Write the startup commands to the node's startup file
+		// startupCommands
+		err := manager.WriteStartupFile(node, startupCommands)
+		if err != nil {
+			log.Fatalf("Failed to write startup file for AS %d: %v", node.ASNumber, err)
+		}
+	}
+
 	return nil
 }
 
@@ -133,15 +192,31 @@ func limitedNode(node graph.Node, branchFactor int) graph.Node {
 		provider = node.Provider
 	}
 
+	// Initialize interfaces
+	interfaceID := 0
+	interfaces := make(map[int]string)
+
+	initializeInterfaces := func(asList []int) {
+		for _, as := range asList {
+			interfaces[interfaceID] = fmt.Sprintf("%d-%d", node.ASNumber, as)
+			interfaceID++
+		}
+	}
+
+	initializeInterfaces(provider)
+	initializeInterfaces(customer)
+	initializeInterfaces(peer)
+
 	return graph.Node{
-		ASNumber: node.ASNumber,
-		Customer: customer,
-		Peer:     peer,
-		Provider: provider,
-		Prefix:   node.Prefix,
-		Location: node.Location,
-		Contacts: node.Contacts,
-		Rank:     node.Rank,
+		ASNumber:   node.ASNumber,
+		Customer:   customer,
+		Peer:       peer,
+		Provider:   provider,
+		Prefix:     node.Prefix,
+		Location:   node.Location,
+		Interfaces: interfaces,
+		Contacts:   node.Contacts,
+		Rank:       node.Rank,
 	}
 }
 

@@ -1,0 +1,6 @@
+
+# IP address of the network interface of PC2
+ip addr add 10.0.1.100/24 dev eth0
+
+# Routing done by using r1 as default gateway
+ip route add default via 10.0.1.1 
