@@ -28,9 +28,6 @@ func main() {
 		log.Fatalf("Failed to generate collision domains: %v", err)
 	}
 
-	// Generate startup files
-	err = engine.GenerateStartupFiles(simulationConfig.KatharaConfigPath, topology)
-	if err != nil {
-		log.Fatalf("Failed to generate startup files: %v", err)
-	}
+	// Assign IP addresses for each on the generated topology
+	engine.GenerateRouterIPs(topology)
 }

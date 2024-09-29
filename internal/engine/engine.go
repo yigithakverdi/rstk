@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"log"
+	"net"
 	"rstk/internal/engine/manager"
 	"rstk/internal/graph"
 	"rstk/internal/parser"
@@ -36,6 +37,9 @@ type TopologyConfig struct {
 	Depth           int
 	BranchingFactor int
 	Redundancy      bool
+	IPVersion       int
+	IPBase          string
+	IPMap           map[int]string
 }
 
 type SimulationConfig struct {
@@ -112,60 +116,105 @@ func GenerateCollisionDomains(katharaConfigPath string, topology map[int]graph.N
 	return nil
 }
 
-func GenerateStartupFiles(katharaConfigPath string, topology map[int]graph.Node) error {
-	subnetCounter := make(map[string]int) // Tracks subnet assignments
-	currentSubnetCounter := 0
+func GenerateRouterIPs(topology map[int]graph.Node) {
 
-	// Assign unique subnet IDs to each collision domain
-	for _, node := range topology {
-		node1 := node.ASNumber
-		for _, neighbor := range append(append(node.Customer, node.Peer...), node.Provider...) {
-			node2 := neighbor
+	// To follow up on the assigned network links between the routers RouterLink struct
+	// is created, it is basically useful for bi-directional checks
+	type RouterLink struct {
+		r1 int
+		r2 int
+	}
 
-			key := fmt.Sprintf("%d-%d", node1, node2)
-			reverseKey := fmt.Sprintf("%d-%d", node2, node1)
+	// Using the net package to generate IP addresses
+	ipNet := &net.IPNet{
+		IP:   net.IPv4(192, 168, 0, 0),
+		Mask: net.CIDRMask(16, 32),
+	}
 
-			// If subnet is not assigned, assign a new one
-			_, exists := subnetCounter[key]
-			_, reverseExists := subnetCounter[reverseKey]
-			if !exists && !reverseExists {
-				subnetCounter[key] = currentSubnetCounter
-				subnetCounter[reverseKey] = currentSubnetCounter
-				currentSubnetCounter++
+	// We need to keep track of the assigned IP addresses to avoid conflicts as we loop
+	// over each node and their neighbors
+	assignedIPs := make(map[RouterLink][2]string)
+
+	// As we loop we also need to keep track of the current subnet address
+	currentSubnet := ipNet.IP.Mask(ipNet.Mask)
+	copy(currentSubnet, ipNet.IP)
+
+	// Function to increment subnet (move to next /30)
+	incrementIP := func(ip net.IP) {
+		for j := len(ip) - 1; j >= 0; j-- {
+			ip[j] += 4 // Move by 4 IPs (next /30 subnet)
+			if ip[j] > 0 {
+				break
 			}
 		}
 	}
 
-	// Assign IP addresses and generate startup files for each router
+	// By iterating over each node in the topology and checking via the RouterLink struct
+	// if the IP address has been assigned or not we can assign the IP addresses to the
+	// interfaces of the routers
 	for _, node := range topology {
-		startupCommands := []string{}
 
-		for ifaceID, connection := range node.Interfaces {
-			subnetID := subnetCounter[connection]
-			ipAddress := fmt.Sprintf("10.0.%d.%d/24", subnetID, ifaceID+1) // Assign IP based on interface ID
+		// Rather then looping over each neighbor in a seperate loop, all of them
+		// are appended to a single slice
+		neighbors := append(node.Customer, node.Peer...)
+		neighbors = append(neighbors, node.Provider...)
 
-			// Add the IP address assignment to the startup commands
-			startupCommands = append(startupCommands, fmt.Sprintf("ip addr add %s dev eth%d", ipAddress, ifaceID))
+		for _, neighbor := range neighbors {
+			link := RouterLink{r1: node.ASNumber, r2: neighbor}
+			reverseLink := RouterLink{r1: neighbor, r2: node.ASNumber}
 
-			// Add routing rule to route traffic via this subnet (basic route setup)
-			startupCommands = append(startupCommands, fmt.Sprintf("ip route add 10.0.%d.0/24 via 10.0.%d.%d", subnetID, subnetID, ifaceID+1))
+			_, exists := assignedIPs[link]
+			_, reverseExists := assignedIPs[reverseLink]
+
+			if !exists && !reverseExists {
+
+				router1IP := net.IP(make([]byte, len(currentSubnet)))
+				router2IP := net.IP(make([]byte, len(currentSubnet)))
+
+				copy(router1IP, currentSubnet)
+				copy(router2IP, currentSubnet)
+
+				// Increment the last octet by 1 and 2 to assign IPs to the routers
+				// last octet is indicated by index 3
+				router1IP[3] += 1
+				router2IP[3] += 2
+
+				// Storing IP assignments on both directions
+				assignedIPs[link] = [2]string{router1IP.String(), router2IP.String()}
+				assignedIPs[reverseLink] = [2]string{router2IP.String(), router1IP.String()}
+
+				l := getInterfaceFromLink(neighbor, node.ASNumber, topology[neighbor])
+
+				// Assing IP addresses to Interface-IP map
+				node.IPPerInterface[l] = router1IP.String()
+
+				if val, ok := topology[neighbor]; ok {
+					l := getInterfaceFromLink(node.ASNumber, neighbor, val)
+					topology[neighbor].IPPerInterface[l] = router2IP.String()
+				} else {
+					log.Printf("AS %d not found in topology", neighbor)
+				}
+
+				// Finally increment the subnet
+				incrementIP(currentSubnet)
+			}
 		}
 
-		// Log the startup commands that are created
-		log.Printf("Startup commands for AS %d", node.ASNumber)
-		for _, command := range startupCommands {
-			log.Printf("- %s", command)
-		}
+		log.Printf("Node state after assigning IPs for AS %v", node)
+	}
+}
 
-		// Write the startup commands to the node's startup file
-		// startupCommands
-		err := manager.WriteStartupFile(node, startupCommands)
-		if err != nil {
-			log.Fatalf("Failed to write startup file for AS %d: %v", node.ASNumber, err)
+func getInterfaceFromLink(as1 int, as2 int, node graph.Node) int {
+	link := fmt.Sprintf("%d-%d", as1, as2)
+	result := 0
+	for interfaceID, linkID := range node.Interfaces {
+		if linkID == link {
+			result = interfaceID
+			break
 		}
 	}
-
-	return nil
+	log.Printf("Interface ID for link %s is %d", link, result)
+	return result
 }
 
 // A helper function to select up to N customers, N peers, and N providers from the node.
@@ -208,15 +257,18 @@ func limitedNode(node graph.Node, branchFactor int) graph.Node {
 	initializeInterfaces(peer)
 
 	return graph.Node{
-		ASNumber:   node.ASNumber,
-		Customer:   customer,
-		Peer:       peer,
-		Provider:   provider,
-		Prefix:     node.Prefix,
-		Location:   node.Location,
-		Interfaces: interfaces,
-		Contacts:   node.Contacts,
-		Rank:       node.Rank,
+		ASNumber:       node.ASNumber,
+		Customer:       customer,
+		Peer:           peer,
+		Provider:       provider,
+		Prefix:         node.Prefix,
+		Location:       node.Location,
+		Interfaces:     interfaces,
+		Contacts:       node.Contacts,
+		Rank:           node.Rank,
+		Type:           node.Type,
+		Subnets:        node.Subnets,
+		IPPerInterface: make(map[int]string),
 	}
 }
 
