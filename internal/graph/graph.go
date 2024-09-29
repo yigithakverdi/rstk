@@ -21,24 +21,27 @@ type Graph struct {
 
 // Node struct to represent an AS (Autonomous System) entity
 type Node struct {
-	ASNumber   int
-	Customer   []int
-	Peer       []int
-	Provider   []int
-	Prefix     []string
-	Location   string
-	Interfaces map[string]string
-	Contacts   []string
-	Rank       int
+	ASNumber       int
+	Customer       []int
+	Peer           []int
+	Provider       []int
+	Prefix         []string
+	Location       string
+	Interfaces     map[int]string
+	Contacts       []string
+	Subnets        map[string]int
+	Rank           int
+	Type           string
+	IPPerInterface map[int]string
 }
 
-func (g *Graph) UpdateInterface(asInt int, interfaceName string, collisionDomain string) {
+func (g *Graph) UpdateInterface(asInt int, interfaceID int, collisionDomain string) {
 	node, exists := g.Nodes[asInt]
 	if !exists {
 		fmt.Printf("Node %d does not exist\n", asInt)
 		return
 	}
-	node.Interfaces[interfaceName] = collisionDomain
+	node.Interfaces[interfaceID] = collisionDomain
 	g.Nodes[asInt] = node
 }
 
