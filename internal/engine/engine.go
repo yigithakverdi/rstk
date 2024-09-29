@@ -117,7 +117,6 @@ func GenerateCollisionDomains(katharaConfigPath string, topology map[int]graph.N
 }
 
 func GenerateRouterIPs(topology map[int]graph.Node) {
-
 	// To follow up on the assigned network links between the routers RouterLink struct
 	// is created, it is basically useful for bi-directional checks
 	type RouterLink struct {
@@ -166,6 +165,10 @@ func GenerateRouterIPs(topology map[int]graph.Node) {
 			_, exists := assignedIPs[link]
 			_, reverseExists := assignedIPs[reverseLink]
 
+			log.Printf("Checking if IP is assigned for link %v", link)
+			log.Printf("Checking if IP is assigned for reverse link %v", reverseLink)
+			log.Printf("Assigned IPs: %v", assignedIPs)
+
 			if !exists && !reverseExists {
 
 				router1IP := net.IP(make([]byte, len(currentSubnet)))
@@ -183,24 +186,31 @@ func GenerateRouterIPs(topology map[int]graph.Node) {
 				assignedIPs[link] = [2]string{router1IP.String(), router2IP.String()}
 				assignedIPs[reverseLink] = [2]string{router2IP.String(), router1IP.String()}
 
-				l := getInterfaceFromLink(neighbor, node.ASNumber, topology[neighbor])
-
-				// Assing IP addresses to Interface-IP map
-				node.IPPerInterface[l] = router1IP.String()
-
-				if val, ok := topology[neighbor]; ok {
-					l := getInterfaceFromLink(node.ASNumber, neighbor, val)
-					topology[neighbor].IPPerInterface[l] = router2IP.String()
-				} else {
-					log.Printf("AS %d not found in topology", neighbor)
-				}
-
-				// Finally increment the subnet
+				// Move to the next subnet
 				incrementIP(currentSubnet)
 			}
 		}
+	}
 
-		log.Printf("Node state after assigning IPs for AS %v", node)
+	// After all the assgiend IP addresses for each link and each node in the link is
+	// stored in the assignedIPs map, we can assign the IP addresses to the interfaces
+	// of the routers
+	for link, routerLinks := range assignedIPs {
+		log.Printf("Assigning IP addresses for link %v", link)
+
+		if val, ok := topology[link.r1]; ok {
+			l := getInterfaceFromLink(link.r1, link.r2, val)
+			topology[link.r1].IPPerInterface[l] = routerLinks[0]
+		} else {
+			log.Printf("Link %d-%d not found in topology", link.r1, link.r2)
+		}
+	}
+}
+
+func GenerateStartupCommands(katharaConfigPath string, topology map[int]graph.Node) {
+	log.Printf("Generating startup commands for the routers")
+	for _, node := range topology {
+		fmt.Printf("%v\n", node)
 	}
 }
 
