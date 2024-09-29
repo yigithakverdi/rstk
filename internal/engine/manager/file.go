@@ -89,21 +89,6 @@ func WriteCollisionDomainsToKatharaConfigFile(katharaConfigPath string, collisio
 	return nil
 }
 
-// TODO
-func WriteStartupFile(node graph.Node, startupCommands []string) error {
-	return nil
-}
-
-// TODO
-func WriteIPAddressAssignment(node graph.Node, interfaceID int, ipAddress string) error {
-	return nil
-}
-
-// TODO
-func WriteIPForwardingRule(node graph.Node, interfaceID int, forwardingRule string) error {
-	return nil
-}
-
 // Function for writing content to a file. It returns an error if the write operation fails.
 func writeToFile(filePath string, content string) error {
 	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, os.ModePerm)

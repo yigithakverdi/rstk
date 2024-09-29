@@ -21,17 +21,18 @@ type Graph struct {
 
 // Node struct to represent an AS (Autonomous System) entity
 type Node struct {
-	ASNumber   int
-	Customer   []int
-	Peer       []int
-	Provider   []int
-	Prefix     []string
-	Location   string
-	Interfaces map[int]string
-	Contacts   []string
-	Subnets    map[string]int
-	Rank       int
-	Type       string
+	ASNumber       int
+	Customer       []int
+	Peer           []int
+	Provider       []int
+	Prefix         []string
+	Location       string
+	Interfaces     map[int]string
+	Contacts       []string
+	Subnets        map[string]int
+	Rank           int
+	Type           string
+	IPPerInterface map[int]string
 }
 
 func (g *Graph) UpdateInterface(asInt int, interfaceID int, collisionDomain string) {
