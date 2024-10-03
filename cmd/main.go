@@ -32,5 +32,5 @@ func main() {
 	engine.GenerateRouterIPs(topology)
 
 	// Generate device startup configurations
-	engine.GenerateStartupCommands(simulationConfig.KatharaConfigPath, topology)
+	engine.GenerateFRRConfigurations(topology)
 }
