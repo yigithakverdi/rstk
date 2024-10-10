@@ -67,7 +67,7 @@ func InitializeGraph(asRelFilePath string, blacklistTokens []string) graph.Graph
 		BlacklistTokens: blacklistTokens,
 	}
 	parser.ParseFile()
-	return graph.PopulateGraph(parser.AsRelationships)
+  return graph.PopulateGraph(parser.AsRelationships)
 }
 
 // Initializes and returns the simulation configuration.
@@ -128,9 +128,10 @@ func GenerateRouterIPs(topology map[int]graph.Node) {
 		r2 int
 	}
 
-	ipNet := &net.IPNet{
-		IP:   net.IPv4(10, 0, 0, 0),
-		Mask: net.CIDRMask(24, 32),
+	// Using the net package to generate IP addresses
+  ipNet := &net.IPNet{
+		IP:   net.IPv4(192, 168, 0, 0),
+		Mask: net.CIDRMask(16, 32),
 	}
 
 	assignedIPs := make(map[RouterLink][2]string)
