@@ -1,12 +1,18 @@
 package engine
 
 import (
+	"encoding/binary"
 	"fmt"
 	"log"
 	"net"
+	"os"
+	"path/filepath"
 	"rstk/internal/engine/manager"
 	"rstk/internal/graph"
 	"rstk/internal/parser"
+	"text/template"
+
+	"rstk/pkg/models"
 
 	"github.com/google/uuid"
 )
@@ -117,9 +123,6 @@ func GenerateCollisionDomains(katharaConfigPath string, topology map[int]graph.N
 }
 
 func GenerateRouterIPs(topology map[int]graph.Node) {
-
-	// To follow up on the assigned network links between the routers RouterLink struct
-	// is created, it is basically useful for bi-directional checks
 	type RouterLink struct {
 		r1 int
 		r2 int
@@ -131,31 +134,16 @@ func GenerateRouterIPs(topology map[int]graph.Node) {
 		Mask: net.CIDRMask(16, 32),
 	}
 
-	// We need to keep track of the assigned IP addresses to avoid conflicts as we loop
-	// over each node and their neighbors
 	assignedIPs := make(map[RouterLink][2]string)
+	currentSubnet := ipNet.IP.Mask(ipNet.Mask).To4()
 
-	// As we loop we also need to keep track of the current subnet address
-	currentSubnet := ipNet.IP.Mask(ipNet.Mask)
-	copy(currentSubnet, ipNet.IP)
-
-	// Function to increment subnet (move to next /30)
 	incrementIP := func(ip net.IP) {
-		for j := len(ip) - 1; j >= 0; j-- {
-			ip[j] += 4 // Move by 4 IPs (next /30 subnet)
-			if ip[j] > 0 {
-				break
-			}
-		}
+		ipInt := binary.BigEndian.Uint32(ip)
+		ipInt += 4
+		binary.BigEndian.PutUint32(ip, ipInt)
 	}
 
-	// By iterating over each node in the topology and checking via the RouterLink struct
-	// if the IP address has been assigned or not we can assign the IP addresses to the
-	// interfaces of the routers
 	for _, node := range topology {
-
-		// Rather then looping over each neighbor in a seperate loop, all of them
-		// are appended to a single slice
 		neighbors := append(node.Customer, node.Peer...)
 		neighbors = append(neighbors, node.Provider...)
 
@@ -163,44 +151,105 @@ func GenerateRouterIPs(topology map[int]graph.Node) {
 			link := RouterLink{r1: node.ASNumber, r2: neighbor}
 			reverseLink := RouterLink{r1: neighbor, r2: node.ASNumber}
 
-			_, exists := assignedIPs[link]
-			_, reverseExists := assignedIPs[reverseLink]
-
-			if !exists && !reverseExists {
-
-				router1IP := net.IP(make([]byte, len(currentSubnet)))
-				router2IP := net.IP(make([]byte, len(currentSubnet)))
-
+			if _, exists := assignedIPs[link]; !exists {
+				router1IP := make(net.IP, 4)
+				router2IP := make(net.IP, 4)
 				copy(router1IP, currentSubnet)
 				copy(router2IP, currentSubnet)
 
-				// Increment the last octet by 1 and 2 to assign IPs to the routers
-				// last octet is indicated by index 3
 				router1IP[3] += 1
 				router2IP[3] += 2
 
-				// Storing IP assignments on both directions
 				assignedIPs[link] = [2]string{router1IP.String(), router2IP.String()}
 				assignedIPs[reverseLink] = [2]string{router2IP.String(), router1IP.String()}
 
-				l := getInterfaceFromLink(neighbor, node.ASNumber, topology[neighbor])
-
-				// Assing IP addresses to Interface-IP map
-				node.IPPerInterface[l] = router1IP.String()
-
-				if val, ok := topology[neighbor]; ok {
-					l := getInterfaceFromLink(node.ASNumber, neighbor, val)
-					topology[neighbor].IPPerInterface[l] = router2IP.String()
-				} else {
-					log.Printf("AS %d not found in topology", neighbor)
-				}
-
-				// Finally increment the subnet
 				incrementIP(currentSubnet)
 			}
 		}
+	}
 
-		log.Printf("Node state after assigning IPs for AS %v", node)
+	for link, routerLinks := range assignedIPs {
+		if val, ok := topology[link.r1]; ok {
+			l := getInterfaceFromLink(link.r1, link.r2, val)
+			topology[link.r1].IPPerInterface[l] = routerLinks[0]
+		}
+	}
+}
+
+// Function for generating FRR configurations
+func GenerateFRRConfigurations(topology map[int]graph.Node) {
+
+	routerID := 1
+	for _, node := range topology {
+
+		// Create the router configuration
+		router := models.Router{
+			ID:        fmt.Sprintf("%d", routerID),
+			ASNumber:  node.ASNumber,
+			RouterID:  node.IPPerInterface[0],
+			Neighbors: make([]models.Neighbor, 0),
+		}
+
+		routerID++
+
+		// Add neighbors
+		neighbors := append(node.Customer, node.Peer...)
+		neighbors = append(neighbors, node.Provider...)
+
+		for _, neighbor := range neighbors {
+			if val, ok := topology[node.ASNumber]; ok {
+				l := getInterfaceFromLink(node.ASNumber, neighbor, val)
+				router.Neighbors = append(router.Neighbors, models.Neighbor{
+					IP:        assignedIPs[node.ASNumber][1],
+					AS:        neighbor,
+					Interface: fmt.Sprintf("eth%d", l),
+				})
+			}
+
+			if val, ok := topology[neighbor]; ok {
+				l := getInterfaceFromLink(neighbor, node.ASNumber, val)
+				router.Neighbors = append(router.Neighbors, models.Neighbor{
+					IP:        assignedIPs[neighbor][1],
+					AS:        reverseLink.r2,
+					Interface: fmt.Sprintf("eth%d", l),
+				})
+			}
+		}
+
+		// Generate the FRR configuration
+		generateFRRConfig(router)
+
+	}
+
+	// router := models.Router{
+	// 	ID:       "1",
+	// 	ASNumber: 65001,
+	// 	RouterID: "192.168.1.1",
+	// 	Neighbors: []models.Neighbor{
+	// 		{IP: "10.0.0.1", AS: 65002},
+	// 		{IP: "10.0.0.2", AS: 65003},
+	// 	},
+	// }
+
+	// Load the template
+	templatePath := filepath.Join("configs", "templates", "frr.conf.template")
+	tmpl, err := template.ParseFiles(templatePath)
+	if err != nil {
+		log.Fatalf("Failed to load template: %v", err)
+	}
+
+	// Create the output file
+	outputPath := filepath.Join("configs", "generated", "router"+router.ID+".conf")
+	file, err := os.Create(outputPath)
+	if err != nil {
+		log.Fatalf("Failed to create output file: %v", err)
+	}
+	defer file.Close()
+
+	// Execute the template with the router data
+	err = tmpl.Execute(file, router)
+	if err != nil {
+		log.Fatalf("Failed to execute template: %v", err)
 	}
 }
 
