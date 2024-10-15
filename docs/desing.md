@@ -32,7 +32,7 @@ These features represents concpets that surfaced when conducting my literature r
 - Through data plane and control plane specific functions simulating DDoS scenarios
 
 - Showing how DPDK and P4 could potentially enable resource allocation efficently against standard raw container emulated networks
-
+ 
 - Using DPDK to create high-performance traffic generators for stress-testing the data plane (this could be bounded the containers)
 
 - Providing different module for control and data planes to simulate threat modelling, an example could be introducing anomalous data plane processing, for anomaly injection, or adversarial-policies such as based on control plane events trigger data plane adjustments
