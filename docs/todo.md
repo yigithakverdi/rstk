@@ -8,4 +8,7 @@
 - [ ] Improvements on `graph.go`
       - [ ] AS relation data structure could be adjusted to something more suitable rather then two different maps holding provider customer relations on both ways
 - [ ] Concrete error handling and logging
-- [ ] Defining specification of the engine
+- [ ] Defining specification of the engine more clearly
+- [ ] IP management
+      - [ ] Subnet per link instead of IP per nodes in the link
+      - [ ] There are some redundant operations especially on the funciton `GenerateRouterIPs`

@@ -30,4 +30,7 @@ func main() {
 
 	// Assign IP addresses for each on the generated topology
 	engine.GenerateRouterIPs(topology)
+
+	// Generate device startup configurations
+	engine.GenerateFRRConfigurations(topology)
 }
