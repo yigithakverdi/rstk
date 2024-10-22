@@ -3,6 +3,7 @@ package graph
 import (
 	"fmt"
 	"rstk/internal/parser"
+  // "github.com/dominikbraun/graph"
 )
 
 type Relation int
@@ -33,6 +34,8 @@ type Node struct {
 	Rank           int
 	Type           string
 	IPPerInterface map[int]string
+  ASPAList       []string
+  ASPAEnabled    bool
 }
 
 func (g *Graph) UpdateInterface(asInt int, interfaceID int, collisionDomain string) {
@@ -99,8 +102,13 @@ func PopulateGraph(asRels []parser.AsRel) Graph {
 		graph.Nodes[as1] = node1
 		graph.Nodes[as2] = node2
 	}
-
 	return graph
+}
+
+// Populate graph using graph library
+func PopulateGraphGraph(asRels []parser.AsRel) Graph { 
+  graph := NewGraph()
+  return graph
 }
 
 // MapAsToAdjacencyRelation maps AS relationships to adjacency lists of customers,

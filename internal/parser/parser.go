@@ -111,7 +111,7 @@ func (p *Parser) parseLine(line string) (AsRel, error) {
 
 // Parse input from an io.Reader (for example, a file or string)
 func (p *Parser) Parse(r io.Reader) error {
-	scanner := bufio.NewScanner(r)
+  scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !p.isBlacklisted(line) {
@@ -122,18 +122,19 @@ func (p *Parser) Parse(r io.Reader) error {
 			p.AsRelationships = append(p.AsRelationships, asRel)
 		}
 	}
-
 	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("scanner error: %v", err)
+    return fmt.Errorf("scanner error: %v", err)
 	}
-
+  
 	return nil
 }
 
 // Open and parse file directly by delegating to Parse with os.Open
 func (p *Parser) ParseFile() error {
-	file, err := os.Open(p.AsRelFilePath)
-	if err != nil {
+	print("!")
+  file, err := os.Open(p.AsRelFilePath)
+  print("!!")
+  if err != nil {
 		return fmt.Errorf("error opening file: %v", err)
 	}
 	defer file.Close()
