@@ -131,9 +131,7 @@ func (p *Parser) Parse(r io.Reader) error {
 
 // Open and parse file directly by delegating to Parse with os.Open
 func (p *Parser) ParseFile() error {
-	print("!")
   file, err := os.Open(p.AsRelFilePath)
-  print("!!")
   if err != nil {
 		return fmt.Errorf("error opening file: %v", err)
 	}

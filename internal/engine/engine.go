@@ -11,7 +11,7 @@ import (
 	"rstk/internal/graph"
 	"rstk/internal/parser"
 	// "text/template"
-
+  ggraph "github.com/dominikbraun/graph"
 	// "rstk/pkg/models"
 
 	"github.com/google/uuid"
@@ -55,28 +55,19 @@ type SimulationConfig struct {
 	KatharaConfigPath string
 }
 
-
-// Topology specific functions
-func GetNeighbours(node graph.Node) []int {
-  neighbors := append(node.Customer, node.Peer...)
-  neighbors = append(neighbors, node.Provider...)
-  return neighbors
-}
-
-
 // Function for generating a unique simulation ID using UUID.
 func GenerateSimulationID() string {
 	return uuid.New().String()
 }
 
 // Initializes and parses the AS relationship file, returning the populated graph.
-func InitializeGraph(asRelFilePath string, blacklistTokens []string) graph.Graph {
-	parser := parser.Parser{
+func InitializeGraph(asRelFilePath string, blacklistTokens []string) ggraph.Graph[int, int] {
+	parser := parser.Parser {
 		AsRelFilePath:   asRelFilePath,
 		BlacklistTokens: blacklistTokens,
 	}
 	parser.ParseFile()
-  return graph.PopulateGraphGraph(parser.AsRelationships)
+  return graph.PopulateGraph(parser.AsRelationships)
 }
 
 // Initializes and returns the simulation configuration.
