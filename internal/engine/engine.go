@@ -13,8 +13,8 @@ import (
 	// "text/template"
   ggraph "github.com/dominikbraun/graph"
 	// "rstk/pkg/models"
-
 	"github.com/google/uuid"
+  "container/list"
 )
 
 type EdgeConfig struct {
@@ -98,13 +98,70 @@ func SetupSimulationDirectory(simulationConfig *SimulationConfig) error {
 	return nil
 }
 
-// Function for generating the topology for the simulation. It takes the AS number, graph, and topology
-// configuration as input.
-func GenerateTopology(asNumber int, g graph.Graph, config TopologyConfig) map[int]graph.Node {
-	visited := make(map[int]bool)
-	topology := make(map[int]graph.Node)
-	traverseASMap(asNumber, config.Depth, config.BranchingFactor, visited, g, topology)
-	return topology
+// // Function for generating the topology for the simulation. It takes the AS number, graph, and topology
+// // configuration as input.
+// func GenerateTopology(asNumber int, g graph.Graph, config TopologyConfig) map[int]graph.Node {
+// 	visited := make(map[int]bool)
+// 	topology := make(map[int]graph.Node)
+// 	traverseASMap(asNumber, config.Depth, config.BranchingFactor, visited, g, topology)
+// 	return topology
+// }
+
+// Generates a topology where all the network elements and data is represented inside nodes, though
+// the topology is a subset of the graph, either in equal size or smaller then the original graph
+// also the subset generation is controlled by two parameters, the depth (how deep topology from given AS)
+// and branching factor (how strecthed topology from the current level)
+// Function to get a subset of the graph given a starting AS number, depth, and branching factor
+func GenerateTopology(startAS int, g ggraph.Graph[int, int], config TopologyConfig) ggraph.Graph[int, int] {
+  maxDepth := config.Depth
+  branchingFactor := config.BranchingFactor
+  // Create a new empty graph for the subset
+  subGraph := ggraph.New(ggraph.IntHash, ggraph.Directed())
+
+  // Track visited vertices to avoid reprocessing them
+  visited := make(map[int]bool)
+  visited[startAS] = true
+
+  // Add the starting AS to the subgraph
+  _ = subGraph.AddVertex(startAS)
+
+  // Perform BFS with depth control and branching factor
+  _ = ggraph.BFSWithDepth(g, startAS, func(vertex, depth int) bool {
+      // Stop exploring deeper if we have reached the maxDepth
+      if depth > maxDepth {
+          return true // Stops the BFS traversal for this path
+      }
+
+      // Get the adjacency map and limit the number of neighbors based on the branching factor
+      adjacencyMap, _ := g.AdjacencyMap()
+      neighbors := adjacencyMap[vertex]
+
+      count := 0
+      for neighbor := range neighbors {
+          if count >= branchingFactor {
+              break
+          }
+
+          // Only process unvisited neighbors
+          if !visited[neighbor] {
+              visited[neighbor] = true
+
+              // Add the neighbor to the subgraph
+              _ = subGraph.AddVertex(neighbor)
+
+              // Add the edge between the current vertex and the neighbor
+              edge, _ := g.Edge(vertex, neighbor)
+              _ = subGraph.AddEdge(vertex, neighbor, ggraph.EdgeWeight(edge.Properties.Weight))
+
+              count++
+          }
+      }
+
+      // Continue exploring
+      return false
+  })
+
+  return subGraph
 }
 
 // Function for generating collision domains for the topology. It takes the simulation ID and the
