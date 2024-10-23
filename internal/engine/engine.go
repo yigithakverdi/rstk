@@ -1,20 +1,14 @@
 package engine
 
 import (
-	// "encoding/binary"
 	"fmt"
-	// "log"
-	// "net"
-	// "os"
-	// "path/filepath"
 	"rstk/internal/engine/manager"
-	"rstk/internal/graph"
 	"rstk/internal/parser"
-	// "text/template"
+  "rstk/internal/models/router"
+  "github.com/google/uuid"
+  "github.com/edwingeng/deque"
+  graph "rstk/internal/engine/graph"
   ggraph "github.com/dominikbraun/graph"
-	// "rstk/pkg/models"
-	"github.com/google/uuid"
-  // "container/list"
 )
 
 type EdgeConfig struct {
@@ -24,6 +18,7 @@ type EdgeConfig struct {
 	Latency         int
 	CollusionDomain string
 }
+
 
 type NodeConfig struct {
 	CPU       int
@@ -55,19 +50,12 @@ type SimulationConfig struct {
 	KatharaConfigPath string
 }
 
+
+// Simulation related functions and methods 
+
 // Function for generating a unique simulation ID using UUID.
 func GenerateSimulationID() string {
 	return uuid.New().String()
-}
-
-// Initializes and parses the AS relationship file, returning the populated graph.
-func InitializeGraph(asRelFilePath string, blacklistTokens []string) ggraph.Graph[int, int] {
-	parser := parser.Parser {
-		AsRelFilePath:   asRelFilePath,
-		BlacklistTokens: blacklistTokens,
-	}
-	parser.ParseFile()
-  return graph.PopulateGraph(parser.AsRelationships)
 }
 
 // Initializes and returns the simulation configuration.
@@ -83,10 +71,6 @@ func InitializeSimulationConfig() SimulationConfig {
 	}
 }
 
-func RoutingTables() error {
-  return nil;
-}
-
 // Initializes and creates the Kathara configuration file and directory structure.
 func SetupSimulationDirectory(simulationConfig *SimulationConfig) error {
 	manager.CreateSimulationDirectory(simulationConfig.SimulationID)
@@ -96,6 +80,17 @@ func SetupSimulationDirectory(simulationConfig *SimulationConfig) error {
 	}
 	simulationConfig.KatharaConfigPath = configFilePath
 	return nil
+}
+
+// Topology and graph related functions and methods
+// Initializes and parses the AS relationship file, returning the populated graph.
+func InitializeGraph(asRelFilePath string, blacklistTokens []string) ggraph.Graph[int, int] {
+	parser := parser.Parser {
+		AsRelFilePath:   asRelFilePath,
+		BlacklistTokens: blacklistTokens,
+	}
+	parser.ParseFile()
+  return graph.PopulateGraph(parser.AsRelationships)
 }
 
 // // Function for generating the topology for the simulation. It takes the AS number, graph, and topology
@@ -162,6 +157,34 @@ func GenerateTopology(startAS int, g ggraph.Graph[int, int], config TopologyConf
   })
 
   return subGraph
+}
+
+func FindRoutesTo(router *models.Router, g ggraph.Graph[int, int], targetAS models.Router) {
+    routes := deque.NewDeque()
+    targetNeighbors, err := graph.GetNeighbors(targetAS, g)
+    if err != nil {
+        // Handle error
+        return
+    }
+
+    for _, neighbor := range targetNeighbors {
+        routes.PushBack(targetAS.OrginateRoute(neighbor))
+    }
+
+    for routes.Len() > 0 {
+        route := routes.PopFront().(models.Route)
+        finalRouter := route.Final()
+
+        neighbors, err := graph.GetNeighbors(finalRouter, g)
+        if err != nil {
+            continue
+        }
+
+        for _, neighbor := range neighbors {
+            newRoute := finalRouter.ForwardRoute(route, neighbor)
+            routes.PushBack(newRoute)
+        }
+    }
 }
 
 // Function for generating collision domains for the topology. It takes the simulation ID and the
