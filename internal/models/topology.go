@@ -1,7 +1,11 @@
 package models
 
+
+import (
+  "rstk/internal/models/router"
+)
 type Topology struct {
-	Routers []Router
+	Routers []router.Router
 	Links   []Link
 }
 
