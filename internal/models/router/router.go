@@ -1,10 +1,4 @@
-package router 
-
-import (
-  "rstk/internal/graph"
-  "github.com/edwingeng/deque"
-  ggraph "github.com/dominikbraun/graph"
-)
+package models 
 
 // Router model, could be AS, could be inra-AS router, could be a clinet
 // defined for broad capturing of the routing operations
@@ -69,6 +63,20 @@ type Router struct {
   RouteTable map[int]Route
   Policy     Policy
 }
+
+
+// Below is unused interfaces for decoupling graph from router and engine
+// vice versa. Define an methods are implemented in their respective packages
+// If the engine needs to interact with models.Router methods that depend on graph, 
+// consider defining interfaces in models and implementing them in engine.
+// type GraphProvider interface {
+//     GetNeighbors(router Router, g ggraph.Graph[int, int]) ([]Router, error)
+// }
+//
+// type RoutingEngine interface {
+//     FindRoutesTo(router *Router, targetAS Router)
+// }
+
 
 func (r *Router) ResetRouteTable() {
   r.RouteTable = make(map[int]Route)
@@ -146,32 +154,3 @@ func (r* Router) ForwardRoute(route Route, nextHop Router) Route {
     Authenticated : route.Authenticated && nextHop.IsCritical,
   }
 }
-
-func (r* Router) FindRoutesTo(g ggraph.Graph[int, int], targetAS Router) {
-    routes := deque.NewDeque()
-    targetNeighbors, err := graph.GetNeighbors(targetAS, g)
-    if err != nil {
-        return
-    }
-
-    for _, neighbor := range targetNeighbors {
-        routes.PushBack(targetAS.OrginateRoute(neighbor))
-    }
-
-    for routes.Len() > 0 {
-        route := routes.PopFront().(Route)
-        finalRouter := route.Final()
-
-        neighbors, err := graph.GetNeighbors(finalRouter, g)
-        if err != nil {
-            continue
-        }
-
-        for _, neighbor := range neighbors {
-            newRoute := finalRouter.ForwardRoute(route, neighbor)
-            routes.PushBack(newRoute)
-        }
-    }
-}
-
-

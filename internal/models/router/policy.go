@@ -1,4 +1,4 @@
-package router
+package models 
 
 // Define the basic types for Route, ASys, and Relation
 type Relation int

@@ -1,21 +1,14 @@
 package main
 
 import (
-	// "log"
 	"fmt"
-	// "os"
 	"rstk/internal/engine"
   "rstk/internal/parser"
   "rstk/internal/graph"
-  "os"
-  // "github.com/dominikbraun/graph"
 	"github.com/dominikbraun/graph/draw"
 )
 
 func main() {
-	// Initialize the graph from AS relationships
-	// g := engine.InitializeGraph("data/serial-2/20151201.as-rel2.txt", []string{"#"})
-  
   asNumber := 1 
 
   parser := parser.Parser {
