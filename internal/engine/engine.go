@@ -3,7 +3,7 @@ package engine
 import (
 	// "encoding/binary"
 	"fmt"
-	"log"
+	// "log"
 	// "net"
 	// "os"
 	// "path/filepath"
@@ -14,7 +14,7 @@ import (
   ggraph "github.com/dominikbraun/graph"
 	// "rstk/pkg/models"
 	"github.com/google/uuid"
-  "container/list"
+  // "container/list"
 )
 
 type EdgeConfig struct {
@@ -74,8 +74,8 @@ func InitializeGraph(asRelFilePath string, blacklistTokens []string) ggraph.Grap
 func InitializeSimulationConfig() SimulationConfig {
 	return SimulationConfig{
 		Topology: TopologyConfig{
-			Depth:           2,
-			BranchingFactor: 1,
+			Depth:           100,
+			BranchingFactor: 10,
 			Redundancy:      false,
 		},
 		Global:       GlobalConfig{},
@@ -167,21 +167,21 @@ func GenerateTopology(startAS int, g ggraph.Graph[int, int], config TopologyConf
 // Function for generating collision domains for the topology. It takes the simulation ID and the
 // topology as input. It iterates over each node in the topology and creates collision domains
 // for each of its neighbors.
-func GenerateCollisionDomains(katharaConfigPath string, topology map[int]graph.Node) error {
-	for _, node := range topology {
-		collisionDomains := manager.CreateCollisionDomains(node)
-
-		log.Printf("Collision domains for AS %d", node.ASNumber)
-		for domain := range collisionDomains {
-			log.Printf("%s", domain)
-		}
-		err := manager.WriteCollisionDomainsToKatharaConfigFile(katharaConfigPath, collisionDomains)
-		if err != nil {
-			log.Fatalf("Failed to write collision domains to file %s: %v", katharaConfigPath, err)
-		}
-	}
-	return nil
-}
+// func GenerateCollisionDomains(katharaConfigPath string, topology map[int]graph.Node) error {
+// 	for _, node := range topology {
+// 		collisionDomains := manager.CreateCollisionDomains(node)
+//
+// 		log.Printf("Collision domains for AS %d", node.ASNumber)
+// 		for domain := range collisionDomains {
+// 			log.Printf("%s", domain)
+// 		}
+// 		err := manager.WriteCollisionDomainsToKatharaConfigFile(katharaConfigPath, collisionDomains)
+// 		if err != nil {
+// 			log.Fatalf("Failed to write collision domains to file %s: %v", katharaConfigPath, err)
+// 		}
+// 	}
+// 	return nil
+// }
 
 // func GenerateRouterIPs(topology map[int]graph.Node) {
 // 	type RouterLink struct {
@@ -328,96 +328,96 @@ func GenerateCollisionDomains(katharaConfigPath string, topology map[int]graph.N
 // }
 
 // A helper function to select up to N customers, N peers, and N providers from the node.
-func limitedNode(node graph.Node, branchFactor int) graph.Node {
-	// Limit to `branchFactor` customers, peers, and providers
-	var customer, peer, provider []int
-
-	// Limit to the first `branchFactor` elements (or less if not enough exist)
-	if len(node.Customer) > branchFactor {
-		customer = node.Customer[:branchFactor]
-	} else {
-		customer = node.Customer
-	}
-
-	if len(node.Peer) > branchFactor {
-		peer = node.Peer[:branchFactor]
-	} else {
-		peer = node.Peer
-	}
-
-	if len(node.Provider) > branchFactor {
-		provider = node.Provider[:branchFactor]
-	} else {
-		provider = node.Provider
-	}
-
-	// Initialize interfaces
-	interfaceID := 0
-	interfaces := make(map[int]string)
-
-	initializeInterfaces := func(asList []int) {
-		for _, as := range asList {
-			interfaces[interfaceID] = fmt.Sprintf("%d-%d", node.ASNumber, as)
-			interfaceID++
-		}
-	}
-
-	initializeInterfaces(provider)
-	initializeInterfaces(customer)
-	initializeInterfaces(peer)
-
-	return graph.Node{
-		ASNumber:       node.ASNumber,
-		Customer:       customer,
-		Peer:           peer,
-		Provider:       provider,
-		Prefix:         node.Prefix,
-		Location:       node.Location,
-		Interfaces:     interfaces,
-		Contacts:       node.Contacts,
-		Rank:           node.Rank,
-		Type:           node.Type,
-		Subnets:        node.Subnets,
-		IPPerInterface: make(map[int]string),
-	}
-}
+// func limitedNode(node graph.Node, branchFactor int) graph.Node {
+// 	// Limit to `branchFactor` customers, peers, and providers
+// 	var customer, peer, provider []int
+//
+// 	// Limit to the first `branchFactor` elements (or less if not enough exist)
+// 	if len(node.Customer) > branchFactor {
+// 		customer = node.Customer[:branchFactor]
+// 	} else {
+// 		customer = node.Customer
+// 	}
+//
+// 	if len(node.Peer) > branchFactor {
+// 		peer = node.Peer[:branchFactor]
+// 	} else {
+// 		peer = node.Peer
+// 	}
+//
+// 	if len(node.Provider) > branchFactor {
+// 		provider = node.Provider[:branchFactor]
+// 	} else {
+// 		provider = node.Provider
+// 	}
+//
+// 	// Initialize interfaces
+// 	interfaceID := 0
+// 	interfaces := make(map[int]string)
+//
+// 	initializeInterfaces := func(asList []int) {
+// 		for _, as := range asList {
+// 			interfaces[interfaceID] = fmt.Sprintf("%d-%d", node.ASNumber, as)
+// 			interfaceID++
+// 		}
+// 	}
+//
+// 	initializeInterfaces(provider)
+// 	initializeInterfaces(customer)
+// 	initializeInterfaces(peer)
+//
+// 	return graph.Node{
+// 		ASNumber:       node.ASNumber,
+// 		Customer:       customer,
+// 		Peer:           peer,
+// 		Provider:       provider,
+// 		Prefix:         node.Prefix,
+// 		Location:       node.Location,
+// 		Interfaces:     interfaces,
+// 		Contacts:       node.Contacts,
+// 		Rank:           node.Rank,
+// 		Type:           node.Type,
+// 		Subnets:        node.Subnets,
+// 		IPPerInterface: make(map[int]string),
+// 	}
+// }
 
 // Recursive function to traverse the AS map with depth and branching factor limitations
-func traverseASMap(asNumber int, depthLimit int, branchFactor int, visited map[int]bool, graph graph.Graph, topology map[int]graph.Node) {
-	// Stop if we've reached the depth limit
-	if depthLimit == 0 {
-		return
-	}
-
-	// Check if we've already visited this AS
-	if visited[asNumber] {
-		return
-	}
-	visited[asNumber] = true
-
-	// Get the current AS node
-	node, exists := graph.Nodes[asNumber]
-	if !exists {
-		fmt.Printf("AS %d not found\n", asNumber)
-		return
-	}
-
-	// Print the limited node (with up to `branchFactor` relations)
-	limited := limitedNode(node, branchFactor)
-
-	// Add the limited node to the topology
-	topology[asNumber] = limited
-
-	// fmt.Printf("%+v\n", limited)
-
-	// Recur for the limited customers, peers, and providers
-	for _, customer := range limited.Customer {
-		traverseASMap(customer, depthLimit-1, branchFactor, visited, graph, topology)
-	}
-	for _, peer := range limited.Peer {
-		traverseASMap(peer, depthLimit-1, branchFactor, visited, graph, topology)
-	}
-	for _, provider := range limited.Provider {
-		traverseASMap(provider, depthLimit-1, branchFactor, visited, graph, topology)
-	}
-}
+// func traverseASMap(asNumber int, depthLimit int, branchFactor int, visited map[int]bool, graph graph.Graph, topology map[int]graph.Node) {
+// 	// Stop if we've reached the depth limit
+// 	if depthLimit == 0 {
+// 		return
+// 	}
+//
+// 	// Check if we've already visited this AS
+// 	if visited[asNumber] {
+// 		return
+// 	}
+// 	visited[asNumber] = true
+//
+// 	// Get the current AS node
+// 	node, exists := graph.Nodes[asNumber]
+// 	if !exists {
+// 		fmt.Printf("AS %d not found\n", asNumber)
+// 		return
+// 	}
+//
+// 	// Print the limited node (with up to `branchFactor` relations)
+// 	limited := limitedNode(node, branchFactor)
+//
+// 	// Add the limited node to the topology
+// 	topology[asNumber] = limited
+//
+// 	// fmt.Printf("%+v\n", limited)
+//
+// 	// Recur for the limited customers, peers, and providers
+// 	for _, customer := range limited.Customer {
+// 		traverseASMap(customer, depthLimit-1, branchFactor, visited, graph, topology)
+// 	}
+// 	for _, peer := range limited.Peer {
+// 		traverseASMap(peer, depthLimit-1, branchFactor, visited, graph, topology)
+// 	}
+// 	for _, provider := range limited.Provider {
+// 		traverseASMap(provider, depthLimit-1, branchFactor, visited, graph, topology)
+// 	}
+// }
