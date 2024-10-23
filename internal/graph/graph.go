@@ -1,13 +1,10 @@
 package graph
 
 import (
-	// "os"
 	"fmt"
 	"rstk/internal/parser"
-
+  "rstk/pkg/models"
 	"github.com/dominikbraun/graph"
-	// ggraph "github.com/dominikbraun/graph"
-	// "github.com/dominikbraun/graph/draw"
 )
 
 type Relation int
@@ -16,100 +13,6 @@ const (
 	Customer Relation = -1
 	Peer     Relation = 0
 )
-
-// Two different Graph types, one for the direct relationships and one for the
-// reverse relationships of holding customer and provider both ways to make it
-// efficient to read
-// type Graph struct {
-// 	Nodes map[int]Node
-// }
-
-// Node struct to represent an AS (Autonomous System) entity
-// type Node struct {
-// 	ASNumber       int
-// 	Customer       []int
-// 	Peer           []int
-// 	Provider       []int
-// 	Prefix         []string
-// 	Location       string
-// 	Interfaces     map[int]string
-// 	Contacts       []string
-// 	Subnets        map[string]int
-// 	Rank           int
-// 	Type           string
-// 	IPPerInterface map[int]string
-//   ASPAList       []string
-//   ASPAEnabled    bool
-// }
-//
-
-// func (g *Graph) UpdateInterface(asInt int, interfaceID int, collisionDomain string) {
-// 	node, exists := g.Nodes[asInt]
-// 	if !exists {
-// 		fmt.Printf("Node %d does not exist\n", asInt)
-// 		return
-// 	}
-// 	node.Interfaces[interfaceID] = collisionDomain
-// 	g.Nodes[asInt] = node
-// }
-
-// NewGraph creates a new graph with empty maps for direct and reverse relationships
-// func NewGraph() Graph {
-// 	return Graph{
-// 		Nodes: make(map[int]Node),
-// 	}
-// }
-
-// PopulateGraph takes a slice of AsRel objects and constructs a Graph.
-// It initializes the graph with direct and reverse relationships based on the type of relationship
-// (Customer or Peer) between AS (Autonomous Systems) entities.
-// - Customer relationships are added to both direct and reverse graphs.
-// - Peer relationships are added bidirectionally to both direct and reverse graphs.
-// The function returns the populated Graph.
-// func PopulateGraph(asRels []parser.AsRel) Graph {
-// 	graph := NewGraph()
-//
-// 	for _, rel := range asRels {
-// 		as1 := rel.AS1
-// 		as2 := rel.AS2
-// 		relation := rel.Relation
-//
-// 		// Ensure that AS1 and AS2 exist in the graph nodes
-// 		node1, exists1 := graph.Nodes[as1]
-// 		if !exists1 {
-// 			node1 = Node{ASNumber: as1}
-// 		}
-//
-// 		node2, exists2 := graph.Nodes[as2]
-// 		if !exists2 {
-// 			node2 = Node{ASNumber: as2}
-// 		}
-//
-// 		// It is not allowed to modify fields of struct that is retrieved from a map directly
-// 		// because in Go lookups return copies of the value, and we cannot directly modify
-// 		// those copies, because of that, extract node from the map, modify it's field and then
-// 		// reassign it back to the map.
-// 		switch relation {
-// 		case int(Customer):
-// 			// Add AS2 as a customer of AS1 (provider)
-// 			node1.Customer = append(node1.Customer, as2)
-//
-// 			// Add AS1 as a provider of AS2
-// 			node2.Provider = append(node2.Provider, as1)
-//
-// 		case int(Peer):
-// 			// Add bidirectional peer relationship
-// 			node1.Peer = append(node1.Peer, as2)
-// 			node2.Peer = append(node2.Peer, as1)
-// 		}
-//
-// 		// Update the nodes back into the graph
-// 		graph.Nodes[as1] = node1
-// 		graph.Nodes[as2] = node2
-// 	}
-// 	return graph
-// }
-
 
 // PopulateGraphGraph creates a graph of AS relationships
 func PopulateGraph(asRels []parser.AsRel) graph.Graph[int, int] {
@@ -138,17 +41,42 @@ func PopulateGraph(asRels []parser.AsRel) graph.Graph[int, int] {
 	return g
 }
 
+func LookUpRouter(asNumber int) (models.Router, error) {
+  // Here, you would implement a way to get the Router by ASNumber.
+  // This could involve looking up the router in a database, a map, or any other structure.
+  // For this example, let's assume there's a predefined function or map that gives us the router.
+  return models.Router{
+    ASNumber: asNumber,
+  }, nil
+}
+
+// Function to map AS number to Router
+func GetRouterByASNumber(asNumber int) (models.Router, error) {
+	// Here, you would implement a way to get the Router by ASNumber.
+	// This could involve looking up the router in a database, a map, or any other structure.
+	// For this example, let's assume there's a predefined function or map that gives us the router.
+	router, err := LookUpRouter(asNumber) // Example function for retrieving the router by AS number
+	if err != nil {
+		return models.Router{}, err
+	}
+	return router, nil
+}
+
 // Function to get customers (outgoing edges)
-func GetCustomers(g graph.Graph[int, int], as int) ([]int, error) {
+func GetCustomers(g graph.Graph[int, int], as int) ([]models.Router, error) {
 	adjMap, err := g.AdjacencyMap()
 	if err != nil {
 		return nil, err
 	}
 	if neighbors, exists := adjMap[as]; exists {
-		customers := []int{}
+		customers := []models.Router{}
 		for target, edge := range neighbors {
 			if edge.Properties.Weight == int(Customer) {
-				customers = append(customers, target)
+				// Get the router corresponding to the target AS number
+				router, err := GetRouterByASNumber(target)
+				if err == nil {
+					customers = append(customers, router)
+				}
 			}
 		}
 		return customers, nil
@@ -157,16 +85,20 @@ func GetCustomers(g graph.Graph[int, int], as int) ([]int, error) {
 }
 
 // Function to get providers (incoming edges)
-func GetProviders(g graph.Graph[int, int], as int) ([]int, error) {
+func GetProviders(g graph.Graph[int, int], as int) ([]models.Router, error) {
 	predMap, err := g.PredecessorMap()
 	if err != nil {
 		return nil, err
 	}
 	if predecessors, exists := predMap[as]; exists {
-		providers := []int{}
+		providers := []models.Router{}
 		for predecessor, edge := range predecessors {
 			if edge.Properties.Weight == int(Customer) { // Providers have incoming customer edges
-				providers = append(providers, predecessor)
+				// Get the router corresponding to the predecessor AS number
+				router, err := GetRouterByASNumber(predecessor)
+				if err == nil {
+					providers = append(providers, router)
+				}
 			}
 		}
 		return providers, nil
@@ -175,17 +107,22 @@ func GetProviders(g graph.Graph[int, int], as int) ([]int, error) {
 }
 
 // Function to get peers (both directions)
-func GetPeers(g graph.Graph[int, int], as int) ([]int, error) {
+func GetPeers(g graph.Graph[int, int], as int) ([]models.Router, error) {
 	adjMap, err := g.AdjacencyMap()
 	if err != nil {
 		return nil, err
 	}
-	peers := []int{}
+	peers := []models.Router{}
+
 	// Check for outgoing peer edges
 	if neighbors, exists := adjMap[as]; exists {
 		for target, edge := range neighbors {
 			if edge.Properties.Weight == int(Peer) {
-				peers = append(peers, target)
+				// Get the router corresponding to the target AS number
+				router, err := GetRouterByASNumber(target)
+				if err == nil {
+					peers = append(peers, router)
+				}
 			}
 		}
 	}
@@ -198,30 +135,49 @@ func GetPeers(g graph.Graph[int, int], as int) ([]int, error) {
 	if predecessors, exists := predMap[as]; exists {
 		for predecessor, edge := range predecessors {
 			if edge.Properties.Weight == int(Peer) {
-				peers = append(peers, predecessor)
+				// Get the router corresponding to the predecessor AS number
+				router, err := GetRouterByASNumber(predecessor)
+				if err == nil {
+					peers = append(peers, router)
+				}
 			}
 		}
 	}
 	return peers, nil
 }
 
-// GetNeighbors returns the customers, peers, and providers of a given AS (Autonomous System) number.
+// GetNeighbors returns the customers, peers, and providers of a given AS (Autonomous System) number as a list of Router objects.
 // It looks up the neighbors and classifies them based on the Node's relationship data.
-func GetNeighbors(asNumber int, g graph.Graph[int, int]) map[int][]int {
-  	// Get the customers, peers, and providers of the AS number
-	customers, _ := GetCustomers(g, asNumber)
+func GetNeighbors(router models.Router, g graph.Graph[int, int]) ([]models.Router, error) {
+	asNumber := router.ASNumber
+
+	// Get the customers, peers, and providers of the AS number
+	customers, err := GetCustomers(g, asNumber)
+	if err != nil {
+		return nil, err
+	}
 	fmt.Printf("Customers of AS%d: %v\n", asNumber, customers)
 
-	peers, _ := GetPeers(g, asNumber)
+	peers, err := GetPeers(g, asNumber)
+	if err != nil {
+		return nil, err
+	}
 	fmt.Printf("Peers of AS%d: %v\n", asNumber, peers)
 
-	providers, _ := GetProviders(g, asNumber)
+	providers, err := GetProviders(g, asNumber)
+	if err != nil {
+		return nil, err
+	}
 	fmt.Printf("Providers of AS%d: %v\n", asNumber, providers)
 
-	// Concatenate customers, peers, and providers into one slice
+	// Concatenate customers, peers, and providers into one slice of routers
 	neighbors := append(customers, peers...)
 	neighbors = append(neighbors, providers...)
 
-	// Return a map of asNumber to a slice containing all neighbors
-	return map[int][]int{asNumber: neighbors}
+	return neighbors, nil
+}
+
+// Detects if there is a cycle exists and provides the path of a cycle
+func ContainsCycle() {
+
 }

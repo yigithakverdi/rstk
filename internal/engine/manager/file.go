@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"rstk/internal/graph"
+	// "rstk/internal/graph"
 )
 
 var (
@@ -59,23 +59,23 @@ func CreateKatharaConfigFile(simulationID string) (string, error) {
 //
 // It loops over the node's provider, customer, and peer relationships and creates
 // collision domain configurations for each of them.
-func CreateCollisionDomains(node graph.Node) map[string]bool {
-	interfaceID := 0
-	listOfCollisionDomains := make(map[string]bool)
-
-	createDomains := func(asList []int) {
-		for _, as := range asList {
-			collisionDomain := fmt.Sprintf("%d[%s]=%d", node.ASNumber, fmt.Sprintf("%d", interfaceID), as)
-			listOfCollisionDomains[collisionDomain] = true
-			interfaceID++
-		}
-	}
-
-	createDomains(node.Provider)
-	createDomains(node.Customer)
-	createDomains(node.Peer)
-	return listOfCollisionDomains
-}
+// func CreateCollisionDomains(node graph.Node) map[string]bool {
+// 	interfaceID := 0
+// 	listOfCollisionDomains := make(map[string]bool)
+//
+// 	createDomains := func(asList []int) {
+// 		for _, as := range asList {
+// 			collisionDomain := fmt.Sprintf("%d[%s]=%d", node.ASNumber, fmt.Sprintf("%d", interfaceID), as)
+// 			listOfCollisionDomains[collisionDomain] = true
+// 			interfaceID++
+// 		}
+// 	}
+//
+// 	createDomains(node.Provider)
+// 	createDomains(node.Customer)
+// 	createDomains(node.Peer)
+// 	return listOfCollisionDomains
+// }
 
 // Function for writing collision domains to the Kathara configuration file.
 // It returns an error if the write operation fails.

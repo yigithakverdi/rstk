@@ -7,15 +7,16 @@ import (
 	"rstk/internal/engine"
   "rstk/internal/parser"
   "rstk/internal/graph"
-	// "github.com/dominikbraun/graph"
-	// "github.com/dominikbraun/graph/draw"
+  "os"
+  // "github.com/dominikbraun/graph"
+	"github.com/dominikbraun/graph/draw"
 )
 
 func main() {
 	// Initialize the graph from AS relationships
 	// g := engine.InitializeGraph("data/serial-2/20151201.as-rel2.txt", []string{"#"})
   
-  asNumber := 393809
+  asNumber := 1 
 
   parser := parser.Parser {
     AsRelFilePath: "data/serial-2/20151201.as-rel2.txt",
@@ -25,18 +26,20 @@ func main() {
   g := graph.PopulateGraph(parser.AsRelationships)
   
   providers, _ :=  graph.GetProviders(g, asNumber)
-  fmt.Printf("%v", providers)
+  fmt.Printf("Providers: \n%v\n", providers)
   
   customer, _ :=  graph.GetCustomers(g, asNumber)
-  fmt.Printf("\n%v", customer)
+  fmt.Printf("Customer: \n%v\n", customer)
 
   // Initialize the simulation config
   simulationConfig := engine.InitializeSimulationConfig()
   
   // Generate the topology for the simulation
-  topology := engine.GenerateTopology(asNumber, g, simulationConfig.Topology)
-  fmt.Printf("%v", topology)
-  
+  engine.GenerateTopology(asNumber, g, simulationConfig.Topology)  
+  // file, _ := os.Create("./mygraph.gv")
+  // _ = draw.DOT(topology, file)
+
+
 	// Generate the topology for the simulation
 	// asNumber := 1
 	// topology := engine.GenerateTopology(asNumber, g, simulationConfig.Topology)
