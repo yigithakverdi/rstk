@@ -12,6 +12,10 @@
 - [ ] IP management
       - [ ] Subnet per link instead of IP per nodes in the link
       - [ ] There are some redundant operations especially on the funciton `GenerateRouterIPs`
+- [ ] There is a design conflict about topology and graph logic, either merge them or abstract graph operations
+      solely based on the graph data structures e.g. neighbors, edges, vertex, sub graph, adjacency graph etc.
+      and topology should implement more network related operations such as peer, customer, provider relationshisp
+      ASes logic etc.
 
 # Plan
 Initial design should be as close as possible to fully abstracted BGP routing simulator only, routing should be done on ASes only > Try to turn this into hybrid approach as outlined on the design.md && Try to replicate ASPA deployment startegies > Alternative approach > In-network part

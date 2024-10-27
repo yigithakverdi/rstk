@@ -50,8 +50,11 @@ type SimulationConfig struct {
 	KatharaConfigPath string
 }
 
+type Topology struct {
+  g ggraph.Graph[string, router.Router]
+  asys map[int]router.Router
+}
 
-// Simulation related functions and methods 
 
 // Function for generating a unique simulation ID using UUID.
 func GenerateSimulationID() string {
@@ -159,7 +162,33 @@ func GenerateTopology(startAS int, g ggraph.Graph[int, int], config TopologyConf
   return subGraph
 }
 
-func FindRoutesTo(router *models.Router, g ggraph.Graph[int, int], targetAS models.Router) {
+
+
+// Visualize the generated topology
+func PrintTopology(g ggraph.Graph[int, int]) {
+    // Get the adjacency map
+    adjMap, err := g.AdjacencyMap()
+    if err != nil {
+        fmt.Println("Error getting adjacency map:", err)
+        return
+    }
+
+    // Iterate over the adjacency map
+    for vertex, neighbors := range adjMap {
+        fmt.Printf("Vertex %d:\n", vertex)
+        for neighbor, edge := range neighbors {
+            fmt.Printf("  - connects to %d", neighbor)
+            // If you have edge properties, you can print them
+            if len(edge.Properties.Attributes) > 0 {
+                fmt.Printf(" with attributes: %+v", edge.Properties.Attributes)
+            }
+            fmt.Println()
+        }
+    }
+}
+
+// Route related functions
+func FindRoutesTo(r *router.Router, g ggraph.Graph[int, int], targetAS router.Router) {
     routes := deque.NewDeque()
     targetNeighbors, err := graph.GetNeighbors(targetAS, g)
     if err != nil {
@@ -172,7 +201,7 @@ func FindRoutesTo(router *models.Router, g ggraph.Graph[int, int], targetAS mode
     }
 
     for routes.Len() > 0 {
-        route := routes.PopFront().(models.Route)
+        route := routes.PopFront().(router.Route)
         finalRouter := route.Final()
 
         neighbors, err := graph.GetNeighbors(finalRouter, g)

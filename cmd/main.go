@@ -1,37 +1,67 @@
 package main
 
 import (
-	"fmt"
-	"rstk/internal/engine"
   "rstk/internal/parser"
-  "rstk/internal/graph"
-	"github.com/dominikbraun/graph/draw"
+  "rstk/internal/engine/graph"
 )
 
-func main() {
-  asNumber := 1 
 
+
+func main() {
+  
+  // asNumber := 1 
+  
+  // Temporarly parser logic is moved here
   parser := parser.Parser {
     AsRelFilePath: "data/serial-2/20151201.as-rel2.txt",
     BlacklistTokens: []string{"#"},
   }
   parser.ParseFile()
-  g := graph.PopulateGraph(parser.AsRelationships)
   
-  providers, _ :=  graph.GetProviders(g, asNumber)
-  fmt.Printf("Providers: \n%v\n", providers)
-  
-  customer, _ :=  graph.GetCustomers(g, asNumber)
-  fmt.Printf("Customer: \n%v\n", customer)
 
-  // Initialize the simulation config
-  simulationConfig := engine.InitializeSimulationConfig()
+
+  g, _ := graph.PopulateGraph(parser.AsRelationships)
+  graph.PrintGraph(g)
+
+  // Testing routing functionalities on the created AS graph (without any policy)
+  // First lets choose which AS to start the routing from
+  // asNumber := 1
+
+  // Get the router by AS number
+  // router, err := graph.GetRouterByASNumber(asNumber)
+  // if err != nil {
+  //   log.Fatalf("Failed to get router by AS number: %v", err)
+  // }
+
+
+
   
-  // Generate the topology for the simulation
-  engine.GenerateTopology(asNumber, g, simulationConfig.Topology)  
+
+
+  // g := graph.BuildReachabilityGraph(ases)
+  //
+  // graph.PrintGraph(g)
+
+
+
+ 
+  // For testing routing only operating on a small subset of the graph
+  // simulationConfig := engine.InitializeSimulationConfig()
+  // simulationConfig.Topology = engine.TopologyConfig {
+  //   Depth: 2,
+  //   BranchingFactor: 2,
+  //   Redundancy: false,
+  //   IPVersion: 4,
+  //   IPBase: "",
+  //   IPMap: map[int]string{},
+  // }
+  //
+  // topology := engine.GenerateTopology(asNumber, g, simulationConfig.Topology) 
+  // engine.PrintTopology(topology)
+
+
   // file, _ := os.Create("./mygraph.gv")
   // _ = draw.DOT(topology, file)
-
 
 	// Generate the topology for the simulation
 	// asNumber := 1
