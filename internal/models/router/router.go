@@ -1,6 +1,7 @@
 package router 
 
 import (
+  "fmt"
   "rstk/internal/interfaces"
 )
 
@@ -9,6 +10,12 @@ const (
     Peer     interfaces.Relation = 0
     Provider interfaces.Relation = 1
 )
+
+// Ensure Router implements interfaces.Router
+var _ interfaces.Router = &Router{}
+
+// Ensure Route implements interfaces.Route
+var _ interfaces.Route = &Route{}
 
 // Router model, could be AS, could be inra-AS router, could be a clinet
 // defined for broad capturing of the routing operations
@@ -51,6 +58,20 @@ func (r* Route) ContainsCycle() bool {
   }
   return false
 }
+
+func (r *Route) ToString() string {
+  routerString := "" 
+  routerString += fmt.Sprintf("<Origin router:%d", r.Origin().GetASNumber())
+  routerString += fmt.Sprintf(", Final router:%d", r.GetFinal().GetASNumber())
+
+  routerString += ", Path: "
+  for _, router := range r.GetPath() {
+    routerString += fmt.Sprintf("%d ", router.GetASNumber())
+  }
+  routerString += ">"
+  return routerString
+}
+
 func (r *Route) Length() int {
   return r.PathLength
 }
@@ -74,6 +95,8 @@ func (r *Route) GetFinal() interfaces.Router {
 }
 
 func (r *Route) GetFirstHop() interfaces.Router {
+  // r.Path holds addresses of the list of routers such as 0xc0008214b70
+  // thus printing AS number of the first element in the path as
   return r.Path[1]
 }
 
@@ -110,6 +133,15 @@ type Router struct {
 
 }
 
+// Router to string
+func (r *Router) ToString() string {
+  return fmt.Sprintf("Router %d", r.ASNumber)
+}
+
+func (r *Router) SetPolicy(policy interfaces.Policy) {
+  r.Policy = policy
+}
+
 func (r *Router) GetPolicy() interfaces.Policy {
   return r.Policy
 }
@@ -138,32 +170,64 @@ func (r *Router) ForceRoute(route interfaces.Route) {
   r.RouteTable[route.GetFinal().GetASNumber()] = route 
 }
 
-func (r *Router) LearnRoute(route interfaces.Route) []interfaces.Neighbor {
-      // If the route's destination is the router itself, do nothing
-    if route.GetFinal().GetASNumber() == r.GetASNumber() {
-        return nil
+func (r *Router) IsInPath(path []interfaces.Router) bool {
+  for _, router := range path[:len(path) - 1] {
+        if router.GetASNumber() == r.GetASNumber() {
+            return true
+        }
     }
+    return false
+}
+
+
+func (r *Router) LearnRoute(route interfaces.Route) []interfaces.Neighbor {
+    fmt.Println()
+    fmt.Println("   Learning route...")
+    fmt.Println("   Route: ", route.ToString())  
+    fmt.Println("   Current router: ", r.GetASNumber())
+    // If the route's destination is the router itself, do nothing
+    // if route.GetFinal().GetASNumber() == r.GetASNumber() {
+    //     return nil
+    // }
+
+    if r.IsInPath(route.GetPath()) {
+      fmt.Println("\n   Route contains a loop. Discarding.")
+      return nil
+    }
+
 
     // Check if the route is acceptable according to the policy
     if !r.Policy.AcceptRoute(route) {
         return nil
     }
+    
+    fmt.Println("   Route accepted")
 
     // Check if the new route is preferred over the existing one
     routeTable := r.GetRouteTable()
+    
+    fmt.Println("   Checking if route is preferred...")  
     existingRoute, exists := routeTable[route.GetFinal().GetASNumber()]
+    fmt.Println("   Does route exist in the route table: ", exists)
+    fmt.Printf("   Route table: %v, Final AS in the route %d \n", r.RouteTable, route.GetFinal().GetASNumber())
     if exists && !r.Policy.PreferRoute(existingRoute, route) {
-        return nil
+      return nil
     }
-
+    
     // Update the routing table with the new route
     r.RouteTable[route.GetFinal().GetASNumber()] = route
-
+    fmt.Println("   Route learned")
+    fmt.Println("   Route table updated:")
+    // fmt.Println("   Route table: ", r.RouteTable)
+    for destAS, route := range r.RouteTable {
+      fmt.Printf("    [%d]: %s\n", destAS, route.ToString())
+    }
+  
     // Determine which neighbors to advertise the route to
     forwardToRelations := make(map[interfaces.Relation]bool)    
     relations := []interfaces.Relation{interfaces.Provider, interfaces.Peer, interfaces.Customer}
     for _, relation := range relations {
-        if r.Policy.ForwardTo(route, relation) {
+      if r.Policy.ForwardTo(route, relation) {
             forwardToRelations[relation] = true
         }
     }
@@ -179,13 +243,49 @@ func (r *Router) LearnRoute(route interfaces.Route) []interfaces.Neighbor {
     return neighborsToAdvertise
 }
 
+// Create router object, it creates a router object then
+// it assigns a default policy using create policy which where the
+// policies are created (for now it assings default policy for 
+// every router) 
+func CreateRouter(asNumber int, policy interfaces.Policy) *Router {
+  return &Router{
+    ASNumber: asNumber,
+    RouteTable: make(map[int]interfaces.Route),
+    Policy: policy,
+  }
+}
+
+
+// type Route struct {
+//   FinalAS         interfaces.Router 
+//   FirstHopAS      interfaces.Router 
+//   Path            []interfaces.Router
+//
+//   PathLength      int
+// 	Authenticated   bool
+// 	OriginInvalid   bool
+//   PathEndInvalid  bool
+//   Packet          Packet 
+// }
+
+// def originate_route(self, next_hop: 'AS') -> 'Route':
+//     return Route(
+//         dest=self.as_id,
+//         path=[self, next_hop],
+//         origin_invalid=False,
+//         path_end_invalid=False,
+//         authenticated=self.bgp_sec_enabled,
+//     )
+
+
 // OriginateRoute creates a new Route starting from this router and going to nextHop.
 func (r *Router) OriginateRoute(nextHop interfaces.Router) interfaces.Route {
     return &Route{
+        FinalAS:         r,                       // Final destination is the current router
         Path:            []interfaces.Router{r, nextHop}, // Path includes current router and next hop
         OriginInvalid:   false,
         PathEndInvalid:  false,
-        Authenticated:   r.IsCritical(),                  // Set based on whether the current router is critical
+        Authenticated:   true,                  // Set based on whether the current router is critical
     }
 }
 
@@ -196,6 +296,6 @@ func (r *Router) ForwardRoute(route interfaces.Route, nextHop interfaces.Router)
         Path:            append(route.GetPath(), nextHop),           // Append next hop to the existing path
         OriginInvalid:   route.IsOriginInvalid(),
         PathEndInvalid:  route.IsPathEndInvalid(),
-        Authenticated:   route.IsAuthenticated() && nextHop.IsCritical(), // Maintain authentication only if both routers are secure
+        Authenticated:   route.IsAuthenticated(), // Maintain authentication only if both routers are secure
     }
 }

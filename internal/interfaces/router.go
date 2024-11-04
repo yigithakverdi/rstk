@@ -2,7 +2,6 @@ package interfaces
 
 type Relation int 
 
-
 const (
   Customer Relation = -1
   Peer Relation = 0
@@ -25,7 +24,9 @@ type Route interface {
   IsAuthenticated() bool
   IsOriginInvalid() bool
   IsPathEndInvalid() bool
+  ToString() string
 }
+
 
 
 type Neighbor struct {
@@ -43,5 +44,8 @@ type Router interface {
   ForwardRoute(route Route, nextHop Router) Route
   GetRouteTable() map[int]Route
   GetPolicy() Policy
+  SetPolicy(policy Policy)
   IsCritical() bool
+  // CreateRouter(asNumber int) Router
+  ToString() string
 }

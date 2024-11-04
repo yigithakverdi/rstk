@@ -1,82 +1,106 @@
 package main
 
 import (
-  "rstk/internal/parser"
-  "rstk/internal/engine/graph"
+	"fmt"
+	"rstk/internal/engine/graph"
+	"rstk/internal/parser"
+	"rstk/internal/interfaces"
+	"os"
+  "rstk/internal/models/policy"
+	"runtime/pprof"
 )
-
-
 
 func main() {
   
-  // asNumber := 1 
+  // Create a file to store CPU profile data
+  cpuProfile, err := os.Create("logs/cpu.prof")
+  if err != nil {
+    fmt.Println("Error creating CPU profile file")
+    return
+  }
+
+  defer cpuProfile.Close() 
+
+  // Start CPU profiling
+  if err := pprof.StartCPUProfile(cpuProfile); err != nil {
+    fmt.Println("Error starting CPU profile")
+    return
+  }
   
-  // Temporarly parser logic is moved here
-  parser := parser.Parser {
-    AsRelFilePath: "data/serial-2/20151201.as-rel2.txt",
-    BlacklistTokens: []string{"#"},
+  // For now using simple topology with 4 ASes with simple customer-provider relationships
+  asFile := "data/test-2/test.as-rel2.txt"
+
+  // Parse AS relationships
+  parser := parser.Parser{
+      AsRelFilePath:   asFile,
+      BlacklistTokens: []string{"#"},
   }
   parser.ParseFile()
+
+  // Create topology and populate graph with AS information parsed from CAIDA file
+  t := graph.Topology{}
   
+  g, asys := t.PopulateGraph(parser.AsRelationships)
+  t.G = g
+  t.ASES = asys
+
+  t.InitializeAdjacencyMap()
+  t.InitializePredecessorMap()
+
+  // t.PrintTopology()
+
+  // Initialize policies and neighbors for all routers
+  fmt.Println("Initializing policies and neighbors for all routers")
+  for _, as := range t.ASES {
+      as.SetPolicy(&policy.Policy{
+          T: &t,
+      })
+
+      neighbors, err := t.GetNeighbors(as, t.G)
+      if err != nil {
+          fmt.Println("Error getting neighbors for AS", as.GetASNumber())
+          continue
+      }
 
 
-  g, _ := graph.PopulateGraph(parser.AsRelationships)
-  graph.PrintGraph(g)
+      asNeighbors := []interfaces.Neighbor{}      
+      for _, neighbor := range neighbors {
+          relation, err := t.GetRelationships(as, neighbor)
+          if err != nil {
+              fmt.Println("Error getting relationships for AS", as.GetASNumber())
+              continue
+          }
 
-  // Testing routing functionalities on the created AS graph (without any policy)
-  // First lets choose which AS to start the routing from
-  // asNumber := 1
+          asNeighbors = append(asNeighbors, interfaces.Neighbor{
+              Router:   neighbor,
+              Relation: relation,
+          })
+      }
+      as.Neighbors = asNeighbors
+  }  
 
-  // Get the router by AS number
-  // router, err := graph.GetRouterByASNumber(asNumber)
-  // if err != nil {
-  //   log.Fatalf("Failed to get router by AS number: %v", err)
-  // }
+  targetASNumber := 4 
+  targetRouter, err := t.GetRouterByASNumber(targetASNumber)
+  if err != nil {
+    fmt.Println("Error getting target router")
+    return
+  }
 
+  fmt.Println("Propagating routest from target router")  
+  t.FindRoutesTo(targetRouter)
 
-
-  
-
-
-  // g := graph.BuildReachabilityGraph(ases)
-  //
-  // graph.PrintGraph(g)
-
-
-
- 
-  // For testing routing only operating on a small subset of the graph
-  // simulationConfig := engine.InitializeSimulationConfig()
-  // simulationConfig.Topology = engine.TopologyConfig {
-  //   Depth: 2,
-  //   BranchingFactor: 2,
-  //   Redundancy: false,
-  //   IPVersion: 4,
-  //   IPBase: "",
-  //   IPMap: map[int]string{},
-  // }
-  //
-  // topology := engine.GenerateTopology(asNumber, g, simulationConfig.Topology) 
-  // engine.PrintTopology(topology)
-
-
-  // file, _ := os.Create("./mygraph.gv")
-  // _ = draw.DOT(topology, file)
-
-	// Generate the topology for the simulation
-	// asNumber := 1
-	// topology := engine.GenerateTopology(asNumber, g, simulationConfig.Topology)
-	//  fmt.Printf("%v", topology)
-
-	// Generate and handle collision domains
-	// err = engine.GenerateCollisionDomains(simulationConfig.KatharaConfigPath, topology)
-	// if err != nil {
-	// 	log.Fatalf("Failed to generate collision domains: %v", err)
-	// }
-	//
-	// // Assign IP addresses for each on the generated topology
-	// engine.GenerateRouterIPs(topology)
-	//
-	// // Generate device startup configurations
-	// engine.GenerateFRRConfigurations(topology)
+  // Optionally, inspect routing tables or other state.
+  for asNumber, router := range t.ASES {
+    if(asNumber == 199063) {
+      routeTable := router.GetRouteTable()
+      fmt.Printf("AS %d routing table:\n", asNumber)
+      for destAS, route := range routeTable {
+        fmt.Printf("  Destination AS %d via path: ", destAS)
+        for _, hop := range route.GetPath() {
+            fmt.Printf("%d ", hop.GetASNumber())
+        }
+        fmt.Println()
+      }
+    }
+  }  
 }

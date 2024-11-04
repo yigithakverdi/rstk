@@ -19,7 +19,6 @@ type EdgeConfig struct {
 	CollusionDomain string
 }
 
-
 type NodeConfig struct {
 	CPU       int
 	Memory    int

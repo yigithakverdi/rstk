@@ -1,0 +1,67 @@
+Initializing policies and neighbors for all routers
+Propagating routest from target router
+
+Target router: &router.Router{Providers:[]interfaces.Router(nil), Peers:[]interfaces.Router(nil), Customers:[]interfaces.Router(nil), Interfaces:[]interfaces.Relation(nil), Policy:(*policy.Policy)(0xc00006e140), Neighbors:[]interfaces.Neighbor{interfaces.Neighbor{IP:"", Relation:1, Router:(*router.Router)(0xc00010c680)}}, RouteTable:map[int]interfaces.Route{}, ID:"", RouterType:"", ASNumber:4, RouterID:"", isCritical:false}
+rigin router:4, Final router:3, Path: 4 3 >
+
+Propagating routes through the network...
+Route from AS 3 to AS 3
+Route path: 4 3 
+   Learning route...
+   Route:  <Origin router:4, Final router:3, Path: 4 3 >
+   Current router:  3
+   Route accepted
+   Checking if route is preferred...
+   Does route exist in the route table:  false
+   Route table: map[], Final AS in the route 3 
+   Route learned
+   Route table updated:
+    [3]: <Origin router:4, Final router:3, Path: 4 3 >
+Route is learned, advertising next neighbors
+
+Route from AS 3 to AS 4
+Route path: 4 3 4 
+   Learning route...
+   Route:  <Origin router:4, Final router:4, Path: 4 3 4 >
+   Current router:  4
+
+   Route contains a loop. Discarding.
+Route is learned, advertising next neighbors
+
+Route from AS 3 to AS 2
+Route path: 4 3 2 
+   Learning route...
+   Route:  <Origin router:4, Final router:2, Path: 4 3 2 >
+   Current router:  2
+   Route accepted
+   Checking if route is preferred...
+   Does route exist in the route table:  false
+   Route table: map[], Final AS in the route 2 
+   Route learned
+   Route table updated:
+    [2]: <Origin router:4, Final router:2, Path: 4 3 2 >
+Route is learned, advertising next neighbors
+
+Route from AS 3 to AS 2
+Route path: 4 3 2 
+   Learning route...
+   Route:  <Origin router:4, Final router:2, Path: 4 3 2 >
+   Current router:  2
+   Route accepted
+   Checking if route is preferred...
+   Does route exist in the route table:  true
+   Route table: map[2:0xc00011e200], Final AS in the route 2 
+Local preference
+Local preference
+       Current value:  0xc0000500c0
+       New value:  0xc0000500c8
+AS-Path length
+AS-Path length
+       Current value:  0xc0000500d0
+       New value:  0xc0000500d8
+Next hop AS number
+Next hop AS number
+       Current value:  0xc0000500e0
+       New value:  0xc0000500e8
+Route is learned, advertising next neighbors
+
