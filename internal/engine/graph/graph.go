@@ -35,15 +35,30 @@ var _ interfaces.Topology = &Topology{}
 func (t* Topology) FindRoutesTo(target *router.Router) {
   // Initialize a deque to hold routes processed
   routes := deque.NewDeque()
-  
+
+  // **Step 1: Add self-route to the target router's routing table**
+  // Create a route where the path contains only the target router
+  selfRoute := &router.Route{
+    FinalAS:        target,
+    Path:           []interfaces.Router{target},
+    OriginInvalid:  false,
+    PathEndInvalid: false,
+    Authenticated:  true,
+  }
+
+  // Add the self-route to the target router's routing table
+  target.ForceRoute(selfRoute)    
+
   // For each neighbor of the target router, originate a new route and add it to the deque
   fmt.Printf("Target router: %#v\n", target)
   fmt.Println()
   fmt.Printf("Routes that will be propagated: \n")
+
+
   for _, neighbor := range target.Neighbors {
     route := target.OriginateRoute(neighbor.Router)
     routes.PushBack(route)
-    fmt.Printf("%s\n\n", route.ToString())
+    fmt.Printf("%s\n", route.ToString())
   }
   
   fmt.Println() 
@@ -61,8 +76,8 @@ func (t* Topology) FindRoutesTo(target *router.Router) {
     // Get the final AS of the route
     // finalAS := route.GetFinal()
     currentAS := route.GetPath()[len(route.GetPath())-1]
-    
-    fmt.Printf("Route from AS %d to AS %d\n", route.GetFirstHop().GetASNumber(), currentAS.GetASNumber())
+
+    // fmt.Printf("Route from AS %d to AS %d\n", route.GetFirstHop().GetASNumber(), currentAS.GetASNumber())
     fmt.Printf("Route path: ")
     for _, router := range route.GetPath() {
       fmt.Printf("%d ", router.GetASNumber())
@@ -70,13 +85,14 @@ func (t* Topology) FindRoutesTo(target *router.Router) {
 
     // Learn the route at the current AS and get the neighbors to forward to
     neighborstToAdvertise := currentAS.LearnRoute(route)
-    fmt.Println("Route is learned, advertising next neighbors\n")
+    fmt.Println("Route is learned, advertising next neighbors")
 
     // For each neighbor, forward the route and add it to the deque
     for _, neighbor := range neighborstToAdvertise {
       newRoute := currentAS.ForwardRoute(route, neighbor.Router)
       routes.PushBack(newRoute)
     }
+    fmt.Println()
   }
 }
 
@@ -100,10 +116,9 @@ func (t* Topology) GetRelationships(sourceRouter interfaces.Router, targetRouter
   return interfaces.Relation(weight), nil
 }
 
-
 // PopulateGraphGraph creates a graph of AS relationships returns the graph 
 // and a map of ASes for easy access
-func (t* Topology) PopulateGraph(asRels []parser.AsRel) (graph.Graph[string, *router.Router], map[int]*router.Router) {
+func (t* Topology) PopulateTopology(asRels []parser.AsRel) (graph.Graph[string, *router.Router], map[int]*router.Router) {
   
   // Store ASes in lookup table for easy access
   ases := make(map[int]*router.Router)
@@ -257,7 +272,6 @@ func BuildReachabilityGraph(ases map[int]router.Router) graph.Graph[string, rout
   return g
 }
 
-
 func (t* Topology) LookUpRouter(asNumber int) (*router.Router, error) {
   if router, exists := t.ASES[asNumber]; exists {
     return router, nil
@@ -288,11 +302,6 @@ func ReverseRouterHash(hash string) (int, error) {
 
 // Function to get customers (outgoing edges)
 func (t* Topology) GetCustomers(g graph.Graph[string, *router.Router], as int) ([]*router.Router, error) {
-	// adjMap, err := g.AdjacencyMap()
-	// if err != nil {
-	// 	return nil, err
-	// }
-  
   // Get the hash of the AS
   asHash := fmt.Sprintf("r%d", as)
     
@@ -369,12 +378,6 @@ func (t* Topology) GetPeers(g graph.Graph[string, *router.Router], as int) ([]*r
 		}
 	}
 
-	// Check for incoming peer edges (in case it's a directed peer edge)
-	// predMap, err := g.PredecessorMap()
-	// if err != nil {
-	// 	return nil, err
-	// }
-
   // Get the hash of the as
   asHash = fmt.Sprintf("r%d", as)
 
@@ -414,8 +417,6 @@ func (t *Topology) PrintTopology() {
   }
 }
 
-
-
 // GetNeighbors returns the customers, peers, and providers of a given AS (Autonomous System) number as a list of Router objects.
 // It looks up the neighbors and classifies them based on the Node's relationship data.
 func (t* Topology) GetNeighbors(router *router.Router, g graph.Graph[string, *router.Router]) ([]*router.Router, error) {
@@ -427,38 +428,15 @@ func (t* Topology) GetNeighbors(router *router.Router, g graph.Graph[string, *ro
 		return nil, err
 	}
 
-  // Before printing customers we need to convert them to ToString
-  // fmt.Printf("Customers of AS%d: ", asNumber)
-  // for _, customer := range customers {
-  //   fmt.Printf("%d ", customer.GetASNumber())
-  // } 
-  // fmt.Println()
-
-
 	peers, err := t.GetPeers(g, asNumber)
 	if err != nil {
 		return nil, err
 	}
   
-  // Before printing peers we need to convert them to ToString
-  // fmt.Printf("Peers of AS%d: ", asNumber)
-  // for _, peer := range peers {
-  //   fmt.Printf("%d ", peer.GetASNumber())
-  // }
-  // fmt.Println()
-  
-
 	providers, err := t.GetProviders(g, asNumber)
 	if err != nil {
 		return nil, err
 	}
-
-  // Before printing providers we need to convert them to ToString
-  // fmt.Printf("Providers of AS%d: ", asNumber)
-  // for _, provider := range providers {
-  //   fmt.Printf("%d ", provider.GetASNumber())
-  // }
-  // fmt.Println()
 
 	// Concatenate customers, peers, and providers into one slice of routers
 	neighbors := append(customers, peers...)
@@ -468,56 +446,55 @@ func (t* Topology) GetNeighbors(router *router.Router, g graph.Graph[string, *ro
 }
 
 // FindRoute performs BFS to find a route from sourceRouter to targetRouter
-func (t *Topology) FindRoute(sourceRouter, targetRouter *router.Router) ([]*router.Router, error) {
-    if sourceRouter.GetASNumber() == targetRouter.GetASNumber() {
-        return []*router.Router{sourceRouter}, nil
-    }
-
-    visited := make(map[int]bool)
-    parentMap := make(map[int]*router.Router) // Map to reconstruct the path
-
-    // Initialize deque for BFS
-    queue := deque.NewDeque()
-    queue.PushBack(sourceRouter)
-    visited[sourceRouter.GetASNumber()] = true
-
-    // BFS loop
-    for queue.Len() > 0 {
-        current := queue.PopFront().(*router.Router)
-        
-        // Get neighbors of the current router
-        neighbors, err := t.GetNeighbors(current, t.G)
-        if err != nil {
-            return nil, fmt.Errorf("error fetching neighbors for AS %d: %v", current.GetASNumber(), err)
-        }
-
-        // Process each neighbor
-        for _, neighbor := range neighbors {
-            if visited[neighbor.GetASNumber()] {
-                continue
-            }
-
-            // Mark neighbor as visited and set parent
-            visited[neighbor.GetASNumber()] = true
-            parentMap[neighbor.GetASNumber()] = current
-
-            // Check if target is reached
-            if neighbor.GetASNumber() == targetRouter.GetASNumber() {
-                return t.constructPath(parentMap, sourceRouter, targetRouter), nil
-            }
-
-            queue.PushBack(neighbor)
-        }
-    }
-
-    return nil, fmt.Errorf("no route found from AS %d to AS %d", sourceRouter.GetASNumber(), targetRouter.GetASNumber())
-}
+// func (t *Topology) FindRoute(sourceRouter, targetRouter *router.Router) ([]*router.Router, error) {
+//     if sourceRouter.GetASNumber() == targetRouter.GetASNumber() {
+//         return []*router.Router{sourceRouter}, nil
+//     }
+//
+//     visited := make(map[int]bool)
+//     parentMap := make(map[int]*router.Router) // Map to reconstruct the path
+//
+//     // Initialize deque for BFS
+//     queue := deque.NewDeque()
+//     queue.PushBack(sourceRouter)
+//     visited[sourceRouter.GetASNumber()] = true
+//
+//     // BFS loop
+//     for queue.Len() > 0 {
+//         current := queue.PopFront().(*router.Router)
+//
+//         // Get neighbors of the current router
+//         neighbors, err := t.GetNeighbors(current, t.G)
+//         if err != nil {
+//             return nil, fmt.Errorf("error fetching neighbors for AS %d: %v", current.GetASNumber(), err)
+//         }
+//
+//         // Process each neighbor
+//         for _, neighbor := range neighbors {
+//             if visited[neighbor.GetASNumber()] {
+//                 continue
+//             }
+//
+//             // Mark neighbor as visited and set parent
+//             visited[neighbor.GetASNumber()] = true
+//             parentMap[neighbor.GetASNumber()] = current
+//
+//             // Check if target is reached
+//             if neighbor.GetASNumber() == targetRouter.GetASNumber() {
+//                 return t.constructPath(parentMap, targetRouter), nil
+//             }
+//             queue.PushBack(neighbor)
+//         }
+//     }
+//
+//     return nil, fmt.Errorf("no route found from AS %d to AS %d", sourceRouter.GetASNumber(), targetRouter.GetASNumber())
+// }
 
 // Helper function to construct the path from source to target using parentMap
-func (t *Topology) constructPath(parentMap map[int]*router.Router, sourceRouter, targetRouter *router.Router) []*router.Router {
-    path := []*router.Router{}
-    for current := targetRouter; current != nil; current = parentMap[current.GetASNumber()] {
-        path = append([]*router.Router{current}, path...)
-    }
-    return path
-}
+// func (t *Topology) constructPath(parentMap map[int]*router.Router, targetRouter *router.Router) []*router.Router {
+//     path := []*router.Router{}
+//     for current := targetRouter; current != nil; current = parentMap[current.GetASNumber()] {
+//         path = append([]*router.Router{current}, path...)
+//     }
+//     return path
+// }

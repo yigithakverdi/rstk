@@ -59,18 +59,34 @@ func (r* Route) ContainsCycle() bool {
   return false
 }
 
-func (r *Route) ToString() string {
-  routerString := "" 
-  routerString += fmt.Sprintf("<Origin router:%d", r.Origin().GetASNumber())
-  routerString += fmt.Sprintf(", Final router:%d", r.GetFinal().GetASNumber())
+// func (r *Route) ToString() string {
+//   routerString := "" 
+//   routerString += fmt.Sprintf("<Origin router:%d", r.Origin().GetASNumber())
+//   routerString += fmt.Sprintf(", Final router:%d", r.GetFinal().GetASNumber())
+//
+//   routerString += ", Path: "
+//   for _, router := range r.GetPath() {
+//     routerString += fmt.Sprintf("%d ", router.GetASNumber())
+//   }
+//   routerString += ">"
+//   return routerString
+// }
 
-  routerString += ", Path: "
-  for _, router := range r.GetPath() {
-    routerString += fmt.Sprintf("%d ", router.GetASNumber())
-  }
-  routerString += ">"
-  return routerString
+// String representation of the route, in the form of
+// Route(dest=4, path=[AS-4])
+
+func (r *Route) ToString() string {
+    pathString := ""
+    for i, hop := range r.Path {
+        if i > 0 {
+            pathString += ", "
+        }
+        
+        pathString += fmt.Sprintf("AS-%d", hop.GetASNumber()) 
+    }
+    return fmt.Sprintf("Route(dest=%d, path=[%s])", r.GetFinal().GetASNumber(), pathString)
 }
+
 
 func (r *Route) Length() int {
   return r.PathLength
@@ -97,7 +113,7 @@ func (r *Route) GetFinal() interfaces.Router {
 func (r *Route) GetFirstHop() interfaces.Router {
   // r.Path holds addresses of the list of routers such as 0xc0008214b70
   // thus printing AS number of the first element in the path as
-  return r.Path[1]
+  return r.Path[0]
 }
 
 func (r *Route) GetFinalAS() interfaces.Router {
@@ -183,15 +199,15 @@ func (r *Router) IsInPath(path []interfaces.Router) bool {
 func (r *Router) LearnRoute(route interfaces.Route) []interfaces.Neighbor {
     fmt.Println()
     fmt.Println("   Learning route...")
-    fmt.Println("   Route: ", route.ToString())  
-    fmt.Println("   Current router: ", r.GetASNumber())
+    fmt.Println("   Route:", route.ToString())  
+    fmt.Println("   Current router:", r.GetASNumber())
     // If the route's destination is the router itself, do nothing
     // if route.GetFinal().GetASNumber() == r.GetASNumber() {
     //     return nil
     // }
 
     if r.IsInPath(route.GetPath()) {
-      fmt.Println("\n   Route contains a loop. Discarding.")
+      fmt.Println("   Route contains a loop. Discarding.")
       return nil
     }
 
@@ -208,14 +224,20 @@ func (r *Router) LearnRoute(route interfaces.Route) []interfaces.Neighbor {
     
     fmt.Println("   Checking if route is preferred...")  
     existingRoute, exists := routeTable[route.GetFinal().GetASNumber()]
-    fmt.Println("   Does route exist in the route table: ", exists)
-    fmt.Printf("   Route table: %v, Final AS in the route %d \n", r.RouteTable, route.GetFinal().GetASNumber())
+    fmt.Println("   Does route exist in the route table:", exists)
+    // fmt.Printf("   Route table: %v, Final AS in the route %d \n", r.RouteTable, route.GetFinal().GetASNumber())
+    // Print route table
+    for destAS, route := range r.RouteTable {
+      fmt.Printf("    [%d]: %s\n", destAS, route.ToString())
+    }
+
     if exists && !r.Policy.PreferRoute(existingRoute, route) {
       return nil
     }
     
     // Update the routing table with the new route
-    r.RouteTable[route.GetFinal().GetASNumber()] = route
+    // r.RouteTable[route.GetFinal().GetASNumber()] = route 
+    r.RouteTable[route.GetFirstHop().GetASNumber()] = route
     fmt.Println("   Route learned")
     fmt.Println("   Route table updated:")
     // fmt.Println("   Route table: ", r.RouteTable)
