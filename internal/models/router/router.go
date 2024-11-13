@@ -113,6 +113,7 @@ func (r *Route) GetFinal() interfaces.Router {
 func (r *Route) GetFirstHop() interfaces.Router {
   // r.Path holds addresses of the list of routers such as 0xc0008214b70
   // thus printing AS number of the first element in the path as
+
   return r.Path[0]
 }
 
