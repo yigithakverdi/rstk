@@ -1,9 +1,0 @@
-hostname Router{{ .ASNumber }}
-!
-router bgp {{ .ASNumber }}
-  bgp router-id {{ .RouterID }}
-{{ range .Neighbors }}
-  neighbor {{ .IP }} remote-as {{ .AS }}
-{{ end }}
-!
-line vty
