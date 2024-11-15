@@ -6,7 +6,7 @@ import (
   "strconv"
 
   // Internal library imports
-  // "rstk/internal/router"
+  "rstk/internal/router"
   "rstk/internal/graph"
   "rstk/internal/parser"
 
@@ -169,6 +169,87 @@ func (s *State) CFindRoutesTo(args []string) {
   // Getting the routes to the given router, using the FindRoutesTo function from
   // the topology `func (t *Topology) FindRoutesTo(target *router.Router)` 
   t.FindRoutesTo(router)
+}
+
+// Command for adding a new router to the topology
+func (s *State) CAddRouter(args []string) {
+  // First checking the arguments, there is an additional option for this
+  // according to that option variables are assigned
+  if len(args) != 5  || args[1] != "--neighbor" || args[3] != "--relation" {
+    fmt.Println("[!] Usage: add-router <AS> --neighbor ASNumber --relation <Customer(1)|Peer(0)|Provider(-1)>")
+    fmt.Println("[!] Example: add-router 1 --neighbor 2 --relation -1")
+    return
+  }
+
+  // String to integer for AS number provided
+  as := args[0]
+  asNumber, _ := strconv.Atoi(as)
+
+  // Neighbor as number
+  neighbor := args[2]
+  neighborNumber, _ := strconv.Atoi(neighbor)
+
+  // Relation between the router and the neighbor
+  relation := args[4]
+  relationNumber, _ := strconv.Atoi(relation)
+
+  // Getting the topology from the state
+  t := s.Topology
+
+  // Checking the arguments
+  // TODO for now same AS added every time this command is called, this should be
+  // called with either parameters provided as arguments, configurations or other
+  // methods (need to create router instance and neighbor instances here)
+  r := router.NewRouter(asNumber)
+  
+  // Adding neighbor the routers neighbor list with its provided relation
+  
+  r.Neighbors = append(r.Neighbors, router.Neighbor{
+    Router: t.GetRouter(fmt.Sprintf("r%d", neighborNumber)), 
+    Relation: router.Relation(relationNumber),
+  })
+
+  fmt.Printf("[+] Printing router object as string:\n%s\n", r.ToString())
+
+  // Adding the router to the topology
+  fmt.Println("[+] Adding router to the topology...")
+  t.AddRouter(r)
+}
+
+// Command for adding route hijacking to the topology
+func (s *State) CHijack(args []string) {
+  // Validating the arguments
+  if len(args) != 3 {
+    fmt.Println("[!] Usage: hijack-route <victim> <attacker> <Number of Hops>")
+    return
+  }
+
+  // Getting the topology from the state
+  t := s.Topology
+
+  // Casting the string to integer then hashing it then, accessing it via
+  // GetRouter method since the method requires hashed version of the idenfitifer
+  // of the router
+  as1 := args[0] // Victim AS
+  as2 := args[1] // Attacker AS
+  hops := args[2]
+
+  // Casting it to integer
+  asNumber1, _ := strconv.Atoi(as1)
+  asNumber2, _ := strconv.Atoi(as2)
+  numHops, _ := strconv.Atoi(hops)
+
+  // Hashing the as number (int) to hashed string version of it
+  asHash1 := fmt.Sprintf("r%d", asNumber1)
+  asHash2 := fmt.Sprintf("r%d", asNumber2)
+
+  // Getting the router from the topology
+  router1 := t.GetRouter(asHash1)
+  router2 := t.GetRouter(asHash2)
+
+  // Hijacking the route
+  fmt.Println("[+] Hijacking route...")
+  t.Hijack(router1, router2, numHops)
 }
 
 

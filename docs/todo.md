@@ -20,8 +20,10 @@
 - [ ] Fully testing routing logic on a simple test topology
 - [ ] Implementing ASPA 
 - [ ] Implementing Prefix Hijacking
-- [ ] There is some inconsistencies between so called 'Helper' functions and methods, 'Helper' functions shouldn't
-      be methods or some other solution might be needed
+- [ ] There is some inconsistencies between so called 'Helper' functions and methods, 'Helper' functions shouldn't be methods or some other solution might be needed
+- [ ] When adding a new router to the topology if the router already exists in the topology then following operations are not currently handled (for temporarily assuming everytime a new unique router is added to the topology, since our test topology is small)
+- [ ] Referencing routers, from topology, when adding a new router, especially when working with neighbors is a bit problematic, sometimes new instances of a router could mistakenly referenced instead of the actual router instances from the topology, also ASES synchronizaiton with the topology is another problem, when adding a new router to topology ASES needs the same treatment as well, with all the routers etc.
+    - [ ] Might resolve this by referncing routers with the AS number from the topology directly when building the ASES
 
 # Plan
 Initial design should be as close as possible to fully abstracted BGP routing simulator only, routing should be done on ASes only > Try to turn this into hybrid approach as outlined on the design.md && Try to replicate ASPA deployment startegies > Alternative approach > In-network part

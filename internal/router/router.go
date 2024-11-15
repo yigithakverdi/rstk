@@ -55,7 +55,6 @@ func (n Neighbor) ToString() string {
 	return fmt.Sprintf("<AS%d (%d)>", n.Router.ASNumber, n.Relation)
 }
 
-
 // Method for returning humand readable string representation of a router
 func (r Router) ToString() string {
 	var sb strings.Builder
@@ -155,7 +154,8 @@ func (r *Router) LearnRoute(route *Route) []*Router {
   for _, neighbor := range r.Neighbors {
     if forwardToRelations[neighbor.Relation] {
       neighbors = append(neighbors, neighbor.Router)
-      log.Debugf("AS%d will forward route to neighbor AS%d (relation: %v)", r.ASNumber, neighbor.Router.ASNumber, neighbor.Relation)      
+      log.Debugf("AS%d will forward route to neighbor AS%d (relation: %v)", r.ASNumber, 
+        neighbor.Router.ASNumber, neighbor.Relation)      
     }
   }
   return neighbors
@@ -185,6 +185,18 @@ func (r *Router) getNeighborsByRelation(relation Relation) []Neighbor {
         }
     }
     return neighbors
+}
+
+// Method for creating a new router instance, only AS number is required for creating
+// rest is set to default values, such as empty routing table, empty neighbors etc. 
+// user can set these values later on
+func NewRouter(asNumber int) *Router {
+  return &Router{
+    Neighbors:  []Neighbor{},
+    RouteTable: make(map[int]*Route),
+    ASNumber:   asNumber,
+    Policy:     Policy{PolicyType: "DefaultPolicy"},
+  }
 }
 
 // Function for forcing route, in some cases, route needs to be forced without pre-checks
@@ -219,5 +231,4 @@ func (r *Router) ForwardRoute(route *Route, nextHop *Router) *Route {
         Authenticated:   true,
     }
 }
-
 

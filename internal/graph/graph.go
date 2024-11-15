@@ -32,7 +32,8 @@ import (
 // heavily focused on BGP routing, so node relations are included in the code as well, most of the
 // data structures are related to BGP context, this will in the future, with the graph, also will
 // be abstracted away with more modular structure, with either a scripting with 'lua' or 'python'
-// or some templating or some configurations
+// or some templating or some configurations user be able to create their own topologies, with their
+// own routing, policy, route logics, etc.
 
 // Below are all the data strcutres used within the topology
 
@@ -145,6 +146,88 @@ func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.
 	return g, ases
 }
 
+// Adds a router to the topology, that is alread intialized with the Init() function
+// used for including different type of routers to support different type of scenarios
+// such as introducing a rouge router, that conducts prefix hijacking, or route leaking
+// etc.
+func (t *Topology) AddRouter(r *router.Router) {
+    // Check if topology is initialized
+    if t.G == nil {
+        fmt.Println("Topology is not initialized yet")
+        return
+    }
+
+    // Check if the router with the same AS number already exists
+    if _ , exists := t.ASES[r.ASNumber]; exists {
+        fmt.Printf("Router with AS%d already exists, adding it as a hijacker\n", r.ASNumber)
+        fmt.Printf("Duplicate routers will exist in the graph\n")
+        fmt.Printf("Overwriting existing one, all routing information will be lost\n")
+        
+        // **Important:** Instead of overwriting, consider handling multiple routers per ASNumber
+        // For simplicity, we'll proceed with overwriting but note the caveat
+        t.ASES[r.ASNumber] = r
+    } else {
+        // Add the new router to the ASES map
+        t.ASES[r.ASNumber] = r
+    }
+
+    // Validate that all specified neighbors exist in the topology
+    for _, neighbor := range r.Neighbors {
+        if _, exists := t.ASES[neighbor.Router.ASNumber]; !exists {
+            fmt.Printf("Neighbor with AS%d does not exist in the topology\n", neighbor.Router.ASNumber)
+            return
+        }
+    }
+
+    // Add the new router to the graph
+    _ = t.G.AddVertex(r)
+
+    // Establish bidirectional edges in the graph
+    for _, neighbor := range r.Neighbors {
+        neighborHash := RouterHash(neighbor.Router)
+        _ = t.G.AddEdge(RouterHash(r), neighborHash, graph.EdgeWeight(int(neighbor.Relation)))
+        _ = t.G.AddEdge(neighborHash, RouterHash(r), graph.EdgeWeight(int(inverseRelation(neighbor.Relation))))
+    }
+
+    // Update Neighbor Routers' Neighbor Lists
+    for _, neighbor := range r.Neighbors {
+        // existingNeighbor := t.ASES[neighbor.Router.ASNumber] // Retrieve from ASES map
+        existingNeighbor := t.GetRouter(RouterHash(neighbor.Router))
+        inverseRel := inverseRelation(neighbor.Relation)
+
+        // Create a new Neighbor instance for the existing neighbor to include the new router
+        newNeighbor := router.Neighbor{
+            Relation: inverseRel,
+            Router:   r,
+        }
+
+        // Check if the new router is already a neighbor to avoid duplicates
+        alreadyNeighbor := false
+        for _, n := range existingNeighbor.Neighbors {
+            if n.Router.ASNumber == r.ASNumber {
+                alreadyNeighbor = true
+                log.Infof("AS%d is already a neighbor to AS%d with relation %d", n.Router.ASNumber, 
+                  r.ASNumber, n.Relation)
+                break
+            }
+        }
+
+        // Append the new neighbor if not already present
+        if !alreadyNeighbor {
+            existingNeighbor.Neighbors = append(existingNeighbor.Neighbors, newNeighbor)
+            log.Infof("Added AS%d as a neighbor to AS%d with relation %d", r.ASNumber, 
+                existingNeighbor.ASNumber, inverseRel)
+        }
+    }
+
+    // Update the adjacency and predecessor maps
+    t.AdjMap, _ = t.G.AdjacencyMap()
+    t.PredMap, _ = t.G.PredecessorMap()
+
+    log.Infof("Successfully added Router AS%d to the topology", r.ASNumber)
+}
+
+ 
 // Main routing related function for finding routes to a specific destination, it is 
 // the one of the core functions within the routing logic of the simulator
 func (t *Topology) FindRoutesTo(target *router.Router) {
@@ -237,3 +320,31 @@ func inverseRelation(rel router.Relation) router.Relation {
 func RouterHash(r *router.Router) string {
   return fmt.Sprintf("r%d", r.ASNumber)
 }
+
+// Method for determining reachability of a given AS, from every other AS in the graph,
+// ASes are taken from the AS map initialized in the Init() function, and for each AS
+// obtained from that map, GetRouter function is called and from there on the reachability
+// of the AS is calculated
+//
+// In the original Python code, following approach is preferred, utilizing more of the graph
+// packages methods. 
+func (t *Topology) Reachability() {
+
+}
+
+// Method for determining reachability of every AS to every other AS in the graph. It is
+// expensive operation, most probably performs worse on larget topologies
+// TODO could research on faster ways, parallelizing, caching, memoization etc.
+func (t *Topology) ReachabilityAll() {
+
+}
+
+// Helpre function for Reachability and ReachabilityAll functions, it builds a reachability graph
+// of the whole topology, with left and right indicators for each AS. It constructs in the end
+// a directed graph
+func (t* Topology) BuildReachabilityGraph() {
+
+}
+
+
+
