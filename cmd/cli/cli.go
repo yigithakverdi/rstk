@@ -74,6 +74,14 @@ func Run(args []string) {
       Execute: func(args []string) { state.CFindRoutesTo(args) },
       Description: "Find routes to a specific destination",
     },
+    "hijack": {
+      Execute: func(args []string) { state.CHijack(args) },
+      Description: "Hijack a route",
+    },
+    "add-router": {
+      Execute: func(args []string) { state.CAddRouter(args) },
+      Description: "Add a router to the topology",
+    },
   }
 
   // Add help command later on to show available commands
