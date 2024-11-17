@@ -6,6 +6,7 @@ import (
   "strings"
 
   // Internal libraries
+  "rstk/internal/protocols"
 
   // Github packages
   log "github.com/sirupsen/logrus"
@@ -22,6 +23,9 @@ import (
 type Relation int
 
 // Constants for AS relationships
+//
+// TODO there are more then customer, peer, provider defined in the IETF draft of ASPA,
+// defined on Section 3, in short these are, Route Server (RS), RS-client, and Complex.
 const (
   Customer Relation = -1
   Peer     Relation = 0
@@ -43,16 +47,51 @@ type Neighbor struct {
 // instead of storing them seperately we can only use neighbors since neighbor struct
 // also encapsulates the relation between the routers
 type Router struct {
-  Neighbors  []Neighbor
-  RouteTable map[int]*Route
+  Neighbors     []Neighbor
+  RouteTable    map[int]*Route
 
-  ASNumber   int
-  Policy     Policy  
+  ASNumber      int
+  Policy        Policy  
+
+  // BGP routing related fields
+  BGPSecEnabled bool
+
+  // Contains list of ASPA objects could be one or more, it is used in
+  // protocols/aspa.go 
+  ASPAList      []protocols.ASPAObject
 }
 
 // Method for returning human readable string format of the neighbor
 func (n Neighbor) ToString() string {
 	return fmt.Sprintf("<AS%d (%d)>", n.Router.ASNumber, n.Relation)
+}
+
+// AddASPA adds a new ASPAObject to the router's ASPAList and updates the policy's ASPA table
+func (r *Router) AddASPA(aspa protocols.ASPAObject) {
+    if protocols.IsCompliantAS(r.ASPAList) {
+        log.Warnf("Router AS%d already has a compliant ASPA. Adding another ASPA may cause conflicts.", r.ASNumber)
+    }
+    r.ASPAList = append(r.ASPAList, aspa)
+    log.Infof("ASPA added to Router AS%d: %+v", r.ASNumber, aspa)
+    r.Policy.UpdateASPATable(r.ASPAList) // Update policy's ASPA table
+}
+
+// RemoveASPA removes an ASPAObject from the router's ASPAList based on CustomerAS and updates the policy
+func (r *Router) RemoveASPA(customerAS int) {
+    for i, aspa := range r.ASPAList {
+        if int(aspa.CustomerAS) == customerAS {
+            r.ASPAList = append(r.ASPAList[:i], r.ASPAList[i+1:]...)
+            log.Infof("ASPA for Customer AS%d removed from Router AS%d", customerAS, r.ASNumber)
+            r.Policy.UpdateASPATable(r.ASPAList) // Update policy's ASPA table
+            return
+        }
+    }
+    log.Warnf("ASPA for Customer AS%d not found in Router AS%d", customerAS, r.ASNumber)
+}
+
+// GetASPA retrieves all ASPAObjects associated with the router
+func (r *Router) GetASPA() []protocols.ASPAObject {
+    return r.ASPAList
 }
 
 // Method for returning humand readable string representation of a router

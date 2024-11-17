@@ -25,7 +25,7 @@ func (r *Route) ToString() string {
     return fmt.Sprintf("Dest AS%d via path %v", r.Dest.ASNumber, asNumbers)
 }
 
-// Method for checking if the route contains cycles or not, depending on the
+// Method for checking if the route containcycles or not, depending on the
 // result of the check, route might be discarded or accepted to be recorded into
 // routing table of the router
 func (r* Route) ContainsCycle() bool {

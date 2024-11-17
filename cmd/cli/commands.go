@@ -4,11 +4,13 @@ import (
   // Core library imports
   "fmt"
   "strconv"
+  "strings"
 
   // Internal library imports
   "rstk/internal/router"
   "rstk/internal/graph"
   "rstk/internal/parser"
+  "rstk/internal/protocols"
 
   // Github library imports
   // "github.com/peterh/liner"
@@ -94,10 +96,10 @@ func (s* State) CGetRouter(args []string) {
   asHash := fmt.Sprintf("r%d", asNumber)
   
   // Getting the router from the topology
-  router := t.GetRouter(asHash)
+  r := t.GetRouter(asHash)
 
   fmt.Println("[+] Current router:")
-  fmt.Println(router.ToString())
+  fmt.Println(r.ToString())
 }
 
 
@@ -252,4 +254,122 @@ func (s *State) CHijack(args []string) {
   t.Hijack(router1, router2, numHops)
 }
 
+// Command to add an ASPA to a router
+func (s *State) CAddASPA(args []string) {
+    if len(args) != 3 {
+        fmt.Println("[!] Usage: add-aspa <RouterAS> <CustomerAS> <ProviderAS1,ProviderAS2,...>")
+        return
+    }
 
+    routerAS, err := strconv.Atoi(args[0])
+    if err != nil {
+        fmt.Println("[!] Invalid RouterAS number")
+        return
+    }
+
+    customerAS, err := strconv.Atoi(args[1])
+    if err != nil {
+        fmt.Println("[!] Invalid CustomerAS number")
+        return
+    }
+
+    providerASStr := args[2]
+    providerASList := strings.Split(providerASStr, ",")
+    var providerAS []int
+    for _, as := range providerASList {
+        asNum, err := strconv.Atoi(strings.TrimSpace(as))
+        if err != nil {
+            fmt.Printf("[!] Invalid ProviderAS number: %s\n", as)
+            return
+        }
+        providerAS = append(providerAS, int(asNum))
+    }
+
+    // Create the ASPAObject
+    aspa := protocols.ASPAObject{
+        CustomerAS:  int(customerAS),
+        ASPASet:     providerAS,
+        Signature:   []byte{}, // Assuming signature handling is out of scope
+        UnionSPAS:   providerAS, // Simplified for this example
+    }
+
+    // Retrieve the router
+    router := s.Topology.GetRouter(fmt.Sprintf("r%d", routerAS))
+    if router == nil {
+        fmt.Printf("[!] Router AS%d not found in topology\n", routerAS)
+        return
+    }
+
+    // Add ASPA to the router
+    router.AddASPA(aspa)
+
+    fmt.Printf("[+] ASPA added to Router AS%d: Customer AS%d, Providers %v\n", routerAS, customerAS, providerAS)
+}
+
+// Command to remove an ASPA from a router
+func (s *State) CRemoveASPA(args []string) {
+    if len(args) != 2 {
+        fmt.Println("[!] Usage: remove-aspa <RouterAS> <CustomerAS>")
+        return
+    }
+
+    routerAS, err := strconv.Atoi(args[0])
+    if err != nil {
+        fmt.Println("[!] Invalid RouterAS number")
+        return
+    }
+
+    customerAS, err := strconv.Atoi(args[1])
+    if err != nil {
+        fmt.Println("[!] Invalid CustomerAS number")
+        return
+    }
+
+    // Retrieve the router
+    router := s.Topology.GetRouter(fmt.Sprintf("r%d", routerAS))
+    if router == nil {
+        fmt.Printf("[!] Router AS%d not found in topology\n", routerAS)
+        return
+    }
+
+    // Remove ASPA from the router
+    router.RemoveASPA(customerAS)
+
+    fmt.Printf("[+] ASPA for Customer AS%d removed from Router AS%d\n", customerAS, routerAS)
+}
+
+// Command to show ASPA configurations of a router
+func (s *State) CShowASPA(args []string) {
+    if len(args) != 1 {
+        fmt.Println("[!] Usage: show-aspa <RouterAS>")
+        return
+    }
+
+    routerAS, err := strconv.Atoi(args[0])
+    if err != nil {
+        fmt.Println("[!] Invalid RouterAS number")
+        return
+    }
+
+    // Retrieve the router
+    router := s.Topology.GetRouter(fmt.Sprintf("r%d", routerAS))
+    if router == nil {
+        fmt.Printf("[!] Router AS%d not found in topology\n", routerAS)
+        return
+    }
+
+    // Retrieve ASPA list
+    aspaList := router.GetASPA()
+    if len(aspaList) == 0 {
+        fmt.Printf("[+] Router AS%d has no ASPA configurations\n", routerAS)
+        return
+    }
+
+    fmt.Printf("[+] ASPA configurations for Router AS%d:\n", routerAS)
+    for _, aspa := range aspaList {
+        fmt.Printf("  Customer AS: %d\n", aspa.CustomerAS)
+        fmt.Printf("  Providers: %v\n", aspa.ASPASet)
+        fmt.Printf("  Signature: %x\n", aspa.Signature)
+        fmt.Println()
+    }
+}

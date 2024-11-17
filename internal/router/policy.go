@@ -2,6 +2,12 @@ package router
 
 import (
   "fmt"
+  
+  // Internal library imports
+  "rstk/internal/protocols"
+
+  // Github library imports
+  log "github.com/sirupsen/logrus"
 )
 
 // Preference rule type for defining the preference rules for the routes
@@ -14,11 +20,63 @@ type PreferenceRule func(route *Route) int
 // other very basic policy implementations
 type Policy struct {
   PolicyType string
+  P_ASAP     ASPAPolicy
+  P_BGPSEC   BGPSecPolicy
+  P_ASCones  ASCones
+}
+
+type ASPAPolicy struct {
+  ASPATable protocols.USPASTable
+}
+
+type BGPSecPolicy struct {
+  // BGP sec related policy components requried
+  // to be used in decision of routing
+}
+
+type ASCones struct {
+  // AS cone related policy components requried
+  // to be used in decision of routing
 }
 
 // Method for accepting route, by default if the route does not contain cycle, it is accepted
-func (p *Policy) AcceptRoute(route *Route) bool {
+func (p *Policy) DefaultAcceptRoute(route *Route) bool {
   return !route.ContainsCycle()
+}
+
+// AcceptRoute method now incorporates ASPA verification
+func (p *Policy) AcceptRoute(route *Route) bool {
+    
+    policyASPA := p.P_ASAP  
+
+    if !p.AcceptRoute(route) {
+        return false
+    }
+
+    // Perform ASPA-based verification
+    asPath := route.PathASNumbers()
+    outcome := protocols.VerifyASPath(asPath, policyASPA.ASPATable)
+    if outcome == protocols.Valid {
+        return true
+    } else if outcome == protocols.Unknown {
+        log.Warnf("AS Path verification outcome: %s (route may be valid or invalid)", outcome)
+        return false
+    } else {
+        log.Warnf("AS Path verification outcome: %s (route is invalid)", outcome)
+        return false
+    }
+}
+
+// UpdateASPATable updates the ASPA table based on the router's ASPAList
+func (p *Policy) UpdateASPATable(aspaList []protocols.ASPAObject) {
+    
+    // Initialize ASPA policy
+    policyASPA := p.P_ASAP
+    
+    for _, aspa := range aspaList {
+        policyASPA.ASPATable[int(aspa.CustomerAS)] = aspa.ASPASet
+    }
+    log.Infof("ASPA table updated: %+v", policyASPA.ASPATable)
 }
 
 // Method for preferring route, by comparing the two routes, and choosing the preferred one

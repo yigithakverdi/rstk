@@ -23,7 +23,13 @@
 - [ ] There is some inconsistencies between so called 'Helper' functions and methods, 'Helper' functions shouldn't be methods or some other solution might be needed
 - [ ] When adding a new router to the topology if the router already exists in the topology then following operations are not currently handled (for temporarily assuming everytime a new unique router is added to the topology, since our test topology is small)
 - [ ] Referencing routers, from topology, when adding a new router, especially when working with neighbors is a bit problematic, sometimes new instances of a router could mistakenly referenced instead of the actual router instances from the topology, also ASES synchronizaiton with the topology is another problem, when adding a new router to topology ASES needs the same treatment as well, with all the routers etc.
-    - [ ] Might resolve this by referncing routers with the AS number from the topology directly when building the ASES
+- [ ] Might resolve this by referncing routers with the AS number from the topology directly when building the ASES 
+
+# Things to Do After Base Route Logic and Hijacking Implementation
+- [ ] Adding attributes to Route and Router structs for supporting ASPA and AS-Cones list
+- [ ] Extending route for BGP-Sec signatures and RPKI validation status
+- [ ] ASPA, AS-Cones, RPKI, BGP-Sec implementations, (every of them have a validation logic on on the policy, `AcceptRoute`)
+- [ ]
 
 # Plan
 Initial design should be as close as possible to fully abstracted BGP routing simulator only, routing should be done on ASes only > Try to turn this into hybrid approach as outlined on the design.md && Try to replicate ASPA deployment startegies > Alternative approach > In-network part
