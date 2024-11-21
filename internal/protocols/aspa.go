@@ -30,7 +30,10 @@ const (
 // 	99: {200, 300},   // AS 200 and 300 are attested providers for AS 100
 // 	100: {201},       // AS 201 is an attested provider for AS 101
 // }
+// Union of SPAS, An AS MUST list in its SPAS the union of all its Provider AS(es)
+// and non-transparent RS AS(es) at which it is an RS-client
 type USPASTable map[int][]int
+
 
 // Global types and variables
 type void struct{}
@@ -60,13 +63,6 @@ type ASPAObject struct {
   CustomerAS int   // CAS AS x
   ASPASet []int    // PAS AS y1, AS y2, ...
   Signature []byte    // Signature of the ASPA object
-  
-  // Union of SPAS, An AS MUST list in its SPAS the union of all its Provider AS(es)
-  // and non-transparent RS AS(es) at which it is an RS-client
-  // 
-  // TODO however, since ASPAObjects are stored in a list, this field is kind of redundant
-  // to prevent this later on this might be moved as a global variable or to router
-  UnionSPAS []int
 }
 
 // A compliant AS should register a single ASPA, to prevent race conditions, during ASPA
@@ -77,7 +73,7 @@ func IsCompliantAS(aspaList []ASPAObject) bool {
   if len(aspaList) == 1 {
     return true
   } else if len(aspaList) > 1 {
-    if len (GetUnionSPAS(aspaList)) == 1 {
+    if len(GetUnionSPAS(aspaList)) == 1 {
       return true
     }
   } else {
@@ -101,12 +97,6 @@ func GetUnionSPAS(aspaList []ASPAObject) []int {
     }
   }
   return unionSPAS
-}
-
-// TODO An AS must include a Provider AS, in its SPAS, regardless of whether it provides connectivity
-// if no provider AS is present for the CAS then AS0 must be included in the SPAS
-func NewASPAObject(customerAS int, aspaSet []int, signature []byte) ASPAObject {
-  return ASPAObject{}
 }
 
 // Let AS x and AS y represent two unique ASes.  A provider
@@ -217,35 +207,6 @@ func CalculateMinDownRamp(asPath []int, uspaspTable USPASTable) int {
 	return n - 1
 }
 
-// Section 7. AS_PATH verification. If an attacker creates a route leak intentionally, they 
-// may try to strip their AS from the AS_PATH. To partyl guard against that, a check is
-// necessary to match the most recently added AS in the AS_PATH to the BGP's neighbor AS.
-// 
-// In the ASPA IETF draft, it is indicated that this check MUST be performed as described in
-// the Section 6.3 [RFC4271] of the BGP specification.
-//
-// If the check fails then the AS_PATH is considered a Malformed AS_PATH and the UPDATE is 
-// considered to be in error (see Section 6.3 of [RFC4271]).
-//
-// If AS_PATH is empty (zero length) then also the UPDATE is considered to be in error.
-func VerifyASPath(asPath []int, uspaspTable USPASTable) Outcome {
-	n := len(asPath)
-
-	// Calculate up-ramp and down-ramp lengths
-	maxUpRamp := CalculateMaxUpRamp(asPath, uspaspTable)
-	minUpRamp := CalculateMinUpRamp(asPath, uspaspTable)
-	maxDownRamp := CalculateMaxDownRamp(asPath, uspaspTable)
-	minDownRamp := CalculateMinDownRamp(asPath, uspaspTable)
-
-	// Verify the AS path based on the defined rules
-	if maxUpRamp+maxDownRamp < n {
-		return Outcome("Invalid")
-	} else if minUpRamp+minDownRamp < n {
-		return Outcome("Unknown")
-	}
-	return Outcome("Valid")
-}
-
 // This function compresses the AS path to remove duplicates or sequences that don't affect validation.
 func CompressASPath(asPath []int) []int {
     compressed := []int{}
@@ -262,22 +223,22 @@ func CompressASPath(asPath []int) []int {
 // from an RS.  In all these cases, the receiving/validating eBGP router expects the AS_PATH 
 // to have only an up-ramp (no down-ramp) for it to be Valid. Therefore, max_down_ramp and 
 // min_down_ramp are set to 0.
-func VerifyUpstreamPath(asPath []int, neighborAS int, isRSClient bool, uspaspTable USPASTable) string {
+func VerifyUpstreamPath(asPath []int, neighborAS int, isRSClient bool, uspaspTable USPASTable) Outcome {
 	n := len(asPath)
 
 	// 1. If the AS_PATH is empty
 	if n == 0 {
-		return "Invalid"
+		return Outcome("Invalid")
 	}
 
 	// 2. If the receiving AS is not an RS-client and the most recently added AS does not match the neighbor AS
 	if !isRSClient && asPath[n-1] != neighborAS {
-		return "Invalid"
+		return Outcome("Invalid")
 	}
 
 	// 3. If the AS_PATH has an AS_SET
 	if HasASSet(asPath) {
-		return "Invalid"
+		return Outcome("Invalid")
 	}
 
 	// Calculate ramp lengths
@@ -286,37 +247,37 @@ func VerifyUpstreamPath(asPath []int, neighborAS int, isRSClient bool, uspaspTab
 
 	// 4. If max_up_ramp < N
 	if maxUpRamp < n {
-		return "Invalid"
+		return Outcome("Invalid")
 	}
 
 	// 5. If min_up_ramp < N
 	if minUpRamp < n {
-		return "Unknown"
+		return Outcome("Unknown")
 	}
 
 	// 6. Else, the procedure halts with the outcome "Valid"
-	return "Valid"
+	return Outcome("Valid")
 }
 
 // The downstream verification algorithm described here is applied when a route is received from a
 // provider. Both up-ramp and down-ramp are calculated. The sum of the maximum and minimum lengths 
 // of the up-ramp and down-ramp is checked against the AS_PATH length
-func VerifyDownstreamPath(asPath []int, neighborAS int, uspaspTable USPASTable) string {
+func VerifyDownstreamPath(asPath []int, neighborAS int, uspaspTable USPASTable) Outcome {
 	n := len(asPath)
 
 	// 1. If the AS_PATH is empty
 	if n == 0 {
-		return "Invalid"
+		return Outcome("Invalid")
 	}
 
 	// 2. If the most recently added AS does not match the neighbor AS
 	if asPath[n-1] != neighborAS {
-		return "Invalid"
+		return Outcome("Invalid")
 	}
 
 	// 3. If the AS_PATH has an AS_SET
 	if HasASSet(asPath) {
-		return "Invalid"
+		return Outcome("Invalid")
 	}
 
 	// Calculate ramp lengths
@@ -327,16 +288,16 @@ func VerifyDownstreamPath(asPath []int, neighborAS int, uspaspTable USPASTable) 
 
 	// 4. If max_up_ramp + max_down_ramp < N
 	if maxUpRamp+maxDownRamp < n {
-		return "Invalid"
+		return Outcome("Invalid")
 	}
 
 	// 5. If min_up_ramp + min_down_ramp < N
 	if minUpRamp+minDownRamp < n {
-		return "Unknown"
+		return Outcome("Unknown")
 	}
 
 	// 6. Else, the procedure halts with the outcome "Valid"
-	return "Valid"
+	return Outcome("Valid")
 }
 
 func HasASSet(asPath []int) bool {

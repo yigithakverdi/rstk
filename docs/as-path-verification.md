@@ -6,8 +6,7 @@ are given Invalid evaluation in the AS_PATH verification procedures
 (Section 7.2 and Section 7.3).  See Section 7.4 for how routes with
 Invalid AS_PATH are handled.
 
-7.1.  Principles
-
+## 7.1.  Principles
 Let the sequence {AS(N), AS(N-1),..., AS(2), AS(1)} represent the
 AS_PATH in terms of unique ASNs, where AS(1) is the origin AS and
 AS(N) is the most recently added AS and neighbor of the receiving/
@@ -48,8 +47,7 @@ invalid: the prefix was leaked or AS_PATH was malformed.
 Sure! Let’s go through this step by step in simpler terms and make 
 it more explanatory.
 
-### What’s Happening?
-
+## What’s Happening?
 We’re looking at how internet traffic flows between different **Autonomous 
 Systems (ASes)**, which are networks run by organizations like ISPs or 
 companies. These ASes are connected in specific ways, and traffic 
@@ -66,8 +64,7 @@ ASes should follow a specific order of these relationships. This is
 where the concept of **valley-free routing** comes in.
 
 
-### What is "Valley-Free Routing"?
-
+## What is "Valley-Free Routing"?
 Imagine traffic flows through a "valley" when it:
 
 1. Starts at the origin AS (the bottom-left of the valley),
@@ -83,8 +80,7 @@ across (Peer), or down (Provider to Customer), but never switch back to "up"
 again once it starts going "down."
 
 
-### The "Ramps" and "Apexes"
-
+## The "Ramps" and "Apexes"
 The AS_PATH can be thought of as two ramps:
 
 1. **Up-ramp (on the right):**
@@ -98,15 +94,13 @@ The AS_PATH can be thought of as two ramps:
    - It also ends at the same **peak** (apex).
 
 
-### What are the "Apexes"?
-
+## What are the "Apexes"?
 The **apex** is where the up-ramp and the down-ramp meet. This is the 
 highest point of the path, where the relationship changes from "up" 
 (customer-to-provider) to "down" (provider-to-customer).
 
 
-### The Rule in Simple Terms
-
+## The Rule in Simple Terms
 For the AS_PATH to be valid (valley-free), the up-ramp and the down-ramp 
 must meet at the apex in one of two ways:
 
@@ -121,8 +115,7 @@ must meet at the apex in one of two ways:
    - This means AS(K) and AS(L) are **peers** (P2P relationship).
 
 
-### Why Does This Matter?
-
+## Why Does This Matter?
 If there are more than one hop between the apexes, it could indicate 
 a **"valley" within the AS_PATH**, where the traffic has gone up, 
 down, and up again, breaking the rules. Such a path is invalid because:
@@ -135,8 +128,7 @@ By ensuring the up-ramp and down-ramp meet cleanly (with 0 or 1 hop),
 we ensure the AS_PATH is logical, secure, and valid.
 
 
-### Visualizing It
-
+## Visualizing It
 Imagine climbing up one side of a mountain (the up-ramp), then coming down the 
 other side (the down-ramp). The "peak" of the mountain is the apex:
 

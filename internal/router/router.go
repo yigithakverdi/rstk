@@ -51,7 +51,8 @@ type Router struct {
   RouteTable    map[int]*Route
 
   ASNumber      int
-  Policy        Policy  
+  Tier          int
+  Policy        IPolicy
 
   // BGP routing related fields
   BGPSecEnabled bool
@@ -66,32 +67,23 @@ func (n Neighbor) ToString() string {
 	return fmt.Sprintf("<AS%d (%d)>", n.Router.ASNumber, n.Relation)
 }
 
-// AddASPA adds a new ASPAObject to the router's ASPAList and updates the policy's ASPA table
-func (r *Router) AddASPA(aspa protocols.ASPAObject) {
-    if protocols.IsCompliantAS(r.ASPAList) {
-        log.Warnf("Router AS%d already has a compliant ASPA. Adding another ASPA may cause conflicts.", r.ASNumber)
+// TODO An AS must include a Provider AS, in its SPAS, regardless of whether it provides connectivity
+// if no provider AS is present for the CAS then AS0 must be included in the SPAS
+//
+// Create new ASPA object and return it, methodology is based on IETF draft. If AS does not have
+// any provider it contains AS0 (by default every one of them)
+func (r *Router) NewASPAObject() protocols.ASPAObject {
+  providers := r.GetProviders()
+  if(r.Tier == 1) {
+    aspa := protocols.ASPAObject{CustomerAS: r.ASNumber, ASPASet: []int{0}}
+    return aspa
+  } else {
+    aspa := protocols.ASPAObject{CustomerAS: r.ASNumber, ASPASet: []int{}}
+    for _, provider := range providers {
+      aspa.ASPASet = append(aspa.ASPASet, provider.Router.ASNumber)
     }
-    r.ASPAList = append(r.ASPAList, aspa)
-    log.Infof("ASPA added to Router AS%d: %+v", r.ASNumber, aspa)
-    r.Policy.UpdateASPATable(r.ASPAList) // Update policy's ASPA table
-}
-
-// RemoveASPA removes an ASPAObject from the router's ASPAList based on CustomerAS and updates the policy
-func (r *Router) RemoveASPA(customerAS int) {
-    for i, aspa := range r.ASPAList {
-        if int(aspa.CustomerAS) == customerAS {
-            r.ASPAList = append(r.ASPAList[:i], r.ASPAList[i+1:]...)
-            log.Infof("ASPA for Customer AS%d removed from Router AS%d", customerAS, r.ASNumber)
-            r.Policy.UpdateASPATable(r.ASPAList) // Update policy's ASPA table
-            return
-        }
-    }
-    log.Warnf("ASPA for Customer AS%d not found in Router AS%d", customerAS, r.ASNumber)
-}
-
-// GetASPA retrieves all ASPAObjects associated with the router
-func (r *Router) GetASPA() []protocols.ASPAObject {
-    return r.ASPAList
+    return aspa
+  }
 }
 
 // Method for returning humand readable string representation of a router
@@ -107,16 +99,25 @@ func (r Router) ToString() string {
 		sb.WriteString("No neighbors configured.\n")
   }
   
-  // TODO trimming needs to be done for the neighbors string, since it will have a comma
-  // as it is done on the routing table, as done below
   sb.WriteString("]\n")
 
   // After showing the neighbors of the router, also show the routing table of the router as well
   // with the same indentation level of the neighbor so that they are aligned and looking good
   sb.WriteString("    Routing Table: [")
-  for _, route := range r.RouteTable {
+  for index, route := range r.RouteTable {
+    if(index == len(r.RouteTable) - 1) {
+      sb.WriteString(fmt.Sprintf("%v", route.ToString()))
+    } else {
     sb.WriteString(fmt.Sprintf("%v,", route.ToString()))
+    }
   }  
+
+  sb.WriteString("]\n")
+  
+  sb.WriteString("    ASPA List: [")
+  for _, aspa := range r.ASPAList {
+    sb.WriteString(fmt.Sprintf("%#v,", aspa))
+  }
 
   // Before returning remove the last comma from the string (comma before the closing bracket)
   // such as making it from ,] to ]
@@ -139,6 +140,7 @@ func (r *Router) GetRelation(router Router) Relation {
 // neighbors according to policy (customer, peer, provider)
 func (r *Router) LearnRoute(route *Route) []*Router {
   log.Debugf("AS%d is learning route to AS%d via path %v", r.ASNumber, route.Dest.ASNumber, route.PathASNumbers())
+  log.Debugf("AS%d is applying policy %T for route learning", r.ASNumber, r.Policy)
 
   // If the current reference innstance of router is the same as the destination of the route
   // then the route is not valid, since the route cannot be same as the current routers
@@ -152,8 +154,12 @@ func (r *Router) LearnRoute(route *Route) []*Router {
   // policy implementation of the user, however by default for now all the policies are defined
   // and considered under DefaultPolicy, thus "Accept Route Policy" is for now checking if contains
   // cycle or not
-  if route.ContainsCycle() {
-    log.Debugf("Route is not valid, since it contains cycle")
+  // if route.ContainsCycle() {
+  //   log.Debugf("Route is not valid, since it contains cycle")
+  //   return []*Router{}
+  // }
+  if r.Policy.AcceptRoute(route) {
+    log.Debugf("Route is not valid according to policy %T", r.Policy)
     return []*Router{}
   }
 
@@ -161,7 +167,7 @@ func (r *Router) LearnRoute(route *Route) []*Router {
   // if the route in the routing table is preferred over the recieved route then we return 
   // empty list of routers, preference check is done through PreferRoute method
   if existingRoute, ok := r.RouteTable[route.Dest.ASNumber]; ok {
-    if r.Policy.PreferRoute(route, existingRoute) {
+    if r.Policy.PreferRoute(route, existingRoute){
       log.Debugf("Route is not valid, since it is not preferred over the existing route")
       return []*Router{}
     }
@@ -234,7 +240,7 @@ func NewRouter(asNumber int) *Router {
     Neighbors:  []Neighbor{},
     RouteTable: make(map[int]*Route),
     ASNumber:   asNumber,
-    Policy:     Policy{PolicyType: "DefaultPolicy"},
+    Policy:     &DefaultPolicy{},
   }
 }
 

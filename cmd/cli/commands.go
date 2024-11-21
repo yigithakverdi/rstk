@@ -4,17 +4,45 @@ import (
   // Core library imports
   "fmt"
   "strconv"
-  "strings"
 
   // Internal library imports
   "rstk/internal/router"
   "rstk/internal/graph"
   "rstk/internal/parser"
-  "rstk/internal/protocols"
 
   // Github library imports
   // "github.com/peterh/liner"
 )
+
+// Create new ASPA object for a given router (AS number)
+func (s *State) CCreateASPA(args []string) {
+  // First checking the arguments
+  if len(args) != 1 {
+    fmt.Println("[!] Usage: create-aspa <AS>")
+    return
+  }
+
+  // Getting the topology from the state
+  t := s.Topology
+
+  // Casting the string to integer then hashing it then, accessing it via
+  // GetRouter method since the method requires hashed version of the idenfitifer
+  // of the router
+  as := args[0]
+
+  // Casting it to integer
+  asNumber, _ := strconv.Atoi(as)
+  
+  // Hashing the as number (int) to hashed string version of it
+  asHash := fmt.Sprintf("r%d", asNumber)
+
+  // Getting the router from the topology
+  router := t.GetRouter(asHash)
+
+  // Creating ASPA for the given router
+  fmt.Println("[+] Creating ASPA for the router...")
+  router.NewASPAObject()
+}
 
 // Command that initializes the topology with the given AS relationships
 func (s *State) CInit(args []string) {
@@ -101,7 +129,6 @@ func (s* State) CGetRouter(args []string) {
   fmt.Println("[+] Current router:")
   fmt.Println(r.ToString())
 }
-
 
 // Command for obtaining relations of the given two router (that are neighbors)
 func (s *State) CGetRelation(args []string) {
@@ -254,122 +281,3 @@ func (s *State) CHijack(args []string) {
   t.Hijack(router1, router2, numHops)
 }
 
-// Command to add an ASPA to a router
-func (s *State) CAddASPA(args []string) {
-    if len(args) != 3 {
-        fmt.Println("[!] Usage: add-aspa <RouterAS> <CustomerAS> <ProviderAS1,ProviderAS2,...>")
-        return
-    }
-
-    routerAS, err := strconv.Atoi(args[0])
-    if err != nil {
-        fmt.Println("[!] Invalid RouterAS number")
-        return
-    }
-
-    customerAS, err := strconv.Atoi(args[1])
-    if err != nil {
-        fmt.Println("[!] Invalid CustomerAS number")
-        return
-    }
-
-    providerASStr := args[2]
-    providerASList := strings.Split(providerASStr, ",")
-    var providerAS []int
-    for _, as := range providerASList {
-        asNum, err := strconv.Atoi(strings.TrimSpace(as))
-        if err != nil {
-            fmt.Printf("[!] Invalid ProviderAS number: %s\n", as)
-            return
-        }
-        providerAS = append(providerAS, int(asNum))
-    }
-
-    // Create the ASPAObject
-    aspa := protocols.ASPAObject{
-        CustomerAS:  int(customerAS),
-        ASPASet:     providerAS,
-        Signature:   []byte{}, // Assuming signature handling is out of scope
-        UnionSPAS:   providerAS, // Simplified for this example
-    }
-
-    // Retrieve the router
-    router := s.Topology.GetRouter(fmt.Sprintf("r%d", routerAS))
-    if router == nil {
-        fmt.Printf("[!] Router AS%d not found in topology\n", routerAS)
-        return
-    }
-
-    // Add ASPA to the router
-    router.AddASPA(aspa)
-
-    fmt.Printf("[+] ASPA added to Router AS%d: Customer AS%d, Providers %v\n", routerAS, customerAS, providerAS)
-}
-
-// Command to remove an ASPA from a router
-func (s *State) CRemoveASPA(args []string) {
-    if len(args) != 2 {
-        fmt.Println("[!] Usage: remove-aspa <RouterAS> <CustomerAS>")
-        return
-    }
-
-    routerAS, err := strconv.Atoi(args[0])
-    if err != nil {
-        fmt.Println("[!] Invalid RouterAS number")
-        return
-    }
-
-    customerAS, err := strconv.Atoi(args[1])
-    if err != nil {
-        fmt.Println("[!] Invalid CustomerAS number")
-        return
-    }
-
-    // Retrieve the router
-    router := s.Topology.GetRouter(fmt.Sprintf("r%d", routerAS))
-    if router == nil {
-        fmt.Printf("[!] Router AS%d not found in topology\n", routerAS)
-        return
-    }
-
-    // Remove ASPA from the router
-    router.RemoveASPA(customerAS)
-
-    fmt.Printf("[+] ASPA for Customer AS%d removed from Router AS%d\n", customerAS, routerAS)
-}
-
-// Command to show ASPA configurations of a router
-func (s *State) CShowASPA(args []string) {
-    if len(args) != 1 {
-        fmt.Println("[!] Usage: show-aspa <RouterAS>")
-        return
-    }
-
-    routerAS, err := strconv.Atoi(args[0])
-    if err != nil {
-        fmt.Println("[!] Invalid RouterAS number")
-        return
-    }
-
-    // Retrieve the router
-    router := s.Topology.GetRouter(fmt.Sprintf("r%d", routerAS))
-    if router == nil {
-        fmt.Printf("[!] Router AS%d not found in topology\n", routerAS)
-        return
-    }
-
-    // Retrieve ASPA list
-    aspaList := router.GetASPA()
-    if len(aspaList) == 0 {
-        fmt.Printf("[+] Router AS%d has no ASPA configurations\n", routerAS)
-        return
-    }
-
-    fmt.Printf("[+] ASPA configurations for Router AS%d:\n", routerAS)
-    for _, aspa := range aspaList {
-        fmt.Printf("  Customer AS: %d\n", aspa.CustomerAS)
-        fmt.Printf("  Providers: %v\n", aspa.ASPASet)
-        fmt.Printf("  Signature: %x\n", aspa.Signature)
-        fmt.Println()
-    }
-}

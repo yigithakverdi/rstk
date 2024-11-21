@@ -43,13 +43,23 @@ import (
 type Topology struct {
   G graph.Graph[string, *router.Router]
   ASES map[int]*router.Router
+  
+  // Policy factor allows dynmaic assignment of policies to routers, depending on the
+  // user configurations more heterogeneous topologies could be created, with different
+  // policy types, such as ASPA, BGP, OSPF, etc.
+  PolicyFactory *PolicyFactory
 
   // Predecessor map and ancestor map is pre-computed, and stored in the topology as well
   // this significantly reduces the computation time with the downside of memory usage
   // for larger topologies
   PredMap map[string]map[string]graph.Edge[string]
-  AdjMap map[string]map[string]graph.Edge[string]  
+  AdjMap map[string]map[string]graph.Edge[string]
+
+  // Topology type is used for determining policy assignment strategies to routers, depending
+  // on provided argument, different number of policies are assigned to routers
+  TopologyType string
 }
+
 
 // Function for initializing the topology, feeding the graph data structure with the
 // specified formats, in this case only AS relationships are fed into the graph
@@ -65,10 +75,21 @@ type Topology struct {
 // very inconvinante at the moment, since this requires manually defining parsing on other
 // unrelated parts of the code (i.e. when calling this function on CLI package commands), 
 // this needs to be generalized as much as possible
-func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.Router], map[int]*router.Router) {
+func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.Router], 
+  map[int]*router.Router) {
+
+  // TODO For now also hardcoding topology type to specific policy types, all the routers
+  // will be set according to below topology type, types are based on the `policy_factory.go`
+  // GetPolicy function, later on also this should be moved to elsewhere, and be more
+  // configurable, or user should be able to define their own policies
+  t.TopologyType = "ASPA"
+  log.Infof("Initializing topology with %s topology type for all routers", t.TopologyType)
   
   // Store ASes in lookup table for easy access
   ases := make(map[int]*router.Router)
+
+  // Initialize the policy factory
+  t.PolicyFactory = NewPolicyFactory() 
 
   // Nodes are represented as hashed route values
   routerHash := func(r *router.Router) string {
@@ -88,18 +109,18 @@ func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.
     // also routing tables are initialized to empty here
     //
     // TODO policy initialization also might needs to be done here
-    // currently every router initialized with default policy
+    // currently every router initialized with default PolicyFactory
     if _, exists := ases[as1]; !exists {
       ases[as1] = &router.Router{
         ASNumber: as1, 
-        Policy: router.Policy{PolicyType: "DefaultPolicy"},
+        Policy: t.PolicyFactory.GetPolicy(as1, t.TopologyType),
         RouteTable: make(map[int]*router.Route),
       }
     }
     if _, exists := ases[as2]; !exists {
       ases[as2] = &router.Router{
         ASNumber: as2, 
-        Policy: router.Policy{PolicyType: "DefaultPolicy"},
+        Policy: t.PolicyFactory.GetPolicy(as1, t.TopologyType),
         RouteTable: make(map[int]*router.Route),
       } 
     }

@@ -34,7 +34,6 @@ type State struct {
   // created out of blue, these checks are done on the
   // related functions
   CurrentRouter *router.Router
-
 }
 
 // Also commands have it's own struct as well, it stores currently function to be
@@ -82,18 +81,10 @@ func Run(args []string) {
       Execute: func(args []string) { state.CAddRouter(args) },
       Description: "Add a router to the topology",
     },
-    "add-aspa": {
-      Execute: func(args []string) { state.CAddASPA(args) },
-      Description: "Add an ASPA to a router: add-aspa <RouterAS> <CustomerAS> <ProviderAS1,ProviderAS2,...>",
+    "create-aspa": {
+      Execute: func(args []string) { state.CCreateASPA(args) },
+      Description: "Create an ASPA",
     },
-    "remove-aspa": {
-      Execute: func(args []string) { state.CRemoveASPA(args) },
-      Description: "Remove an ASPA from a router: remove-aspa <RouterAS> <CustomerAS>",
-    },
-    "show-aspa": {
-      Execute: func(args []string) { state.CShowASPA(args) },
-      Description: "Show ASPA configurations of a router: show-aspa <RouterAS>",
-    },    
   }
 
   // Add help command later on to show available commands
