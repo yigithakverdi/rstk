@@ -14,7 +14,7 @@ var _ IPolicy = (*ASPAPolicy)(nil)
 // neighbors of the current router, and the current AS number
 type ASPAPolicy struct {  
   USPAS     protocols.USPASTable
-  Neighbors map[int]Relation
+  Neighbors []Neighbor
   ASNumber  int
 }
 
@@ -43,14 +43,33 @@ func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
     // The neighbor AS is the last AS in the AS_PATH
     neighborAS := compressedPath[len(compressedPath)-1]
 
-    // Get the neighbor relation from the policy's Neighbors map
-    neighborRelation, exists := ap.Neighbors[neighborAS]
+    // Find the neighbor in the slice that matches the neighborAS
+    // TODO here trying to find, the last AS in the compressed path in the neighbors list
+    // by looping over all the neighbors in the policy struct of the current router
+    // which is very inefficient (considering thousands of AS neighbors)
+    //
+    // TODO furthemore there is a bad design on the structs such that, Router struct contains
+    // Neighbor list containing neighbor structs. Also Router struct contains Policy struct
+    // which also contains Neighbor struct if policy is set to AS so there is this kind of
+    // redundancy and possible conflicts since Neighbor of Router is updated however Neighbors
+    // in the policy might not
+    var neighbor *Neighbor
+    var exists bool
+    for i := range ap.Neighbors {
+        if ap.Neighbors[i].Router.ASNumber == neighborAS {
+            neighbor = &ap.Neighbors[i]
+            exists = true
+            break
+        }
+    }
+
     if !exists {
         log.Warnf("Neighbor AS%d not found in neighbor relations for AS%d", neighborAS, ap.ASNumber)
         // Decide how to handle unknown neighbor relations (e.g., treat as Invalid)
         return false
     }
-
+      
+    var neighborRelation Relation = neighbor.Relation
     var outcome protocols.Outcome
 
     // Apply the appropriate verification algorithm based on neighbor relation

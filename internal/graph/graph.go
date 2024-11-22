@@ -110,17 +110,16 @@ func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.
     //
     // TODO policy initialization also might needs to be done here
     // currently every router initialized with default PolicyFactory
+    // (asNumber int, topologyType string, neighbors map[int]router.Relation) 
     if _, exists := ases[as1]; !exists {
       ases[as1] = &router.Router{
         ASNumber: as1, 
-        Policy: t.PolicyFactory.GetPolicy(as1, t.TopologyType),
         RouteTable: make(map[int]*router.Route),
       }
     }
     if _, exists := ases[as2]; !exists {
       ases[as2] = &router.Router{
         ASNumber: as2, 
-        Policy: t.PolicyFactory.GetPolicy(as1, t.TopologyType),
         RouteTable: make(map[int]*router.Route),
       } 
     }
@@ -132,6 +131,8 @@ func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.
         Router:   ases[as2], // Neighboring router
     }
     ases[as1].Neighbors = append(ases[as1].Neighbors, neighbor1)
+    ases[as1].Tier = t.SetTier(ases[as1].Neighbors)
+    ases[as1].Policy = t.PolicyFactory.GetPolicy(as1, t.TopologyType, ases[as1].Neighbors)
 
     // For bidirectional relationships
     neighbor2 := router.Neighbor{
@@ -139,7 +140,10 @@ func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.
         Router:   ases[as1],
     }
     ases[as2].Neighbors = append(ases[as2].Neighbors, neighbor2)
+    ases[as2].Tier = t.SetTier(ases[as2].Neighbors)
+    ases[as2].Policy = t.PolicyFactory.GetPolicy(as1, t.TopologyType, ases[as2].Neighbors)
 
+    
     // TODO Step X: Policy initialization, is also needed since when learning or finding routes to
     // a given AS, policies are checked first
     
@@ -165,6 +169,30 @@ func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.
   t.ASES = ases
   
 	return g, ases
+}
+
+// Method for setting tiers of the routers
+func (t *Topology) SetTier(neighbors []router.Neighbor) int {
+  var hasCustomer, hasProvider bool
+  for _, neighbor := range neighbors {
+    if neighbor.Relation == router.Customer {
+      hasCustomer = true
+    }
+
+    if neighbor.Relation == router.Provider {
+      hasProvider = true
+    }
+  }
+
+  if(hasCustomer && hasProvider) {
+    return 2 
+  } else if(hasCustomer) {
+    return 1
+  } else if(hasProvider) {
+    return 3
+  } else {
+    return 0
+  }
 }
 
 // Adds a router to the topology, that is alread intialized with the Init() function

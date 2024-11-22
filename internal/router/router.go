@@ -75,13 +75,18 @@ func (n Neighbor) ToString() string {
 func (r *Router) NewASPAObject() protocols.ASPAObject {
   providers := r.GetProviders()
   if(r.Tier == 1) {
+    log.Debugf("AS%d is a Tier 1 AS, adding AS0 to the ASPA list", r.ASNumber)
     aspa := protocols.ASPAObject{CustomerAS: r.ASNumber, ASPASet: []int{0}}
+    r.ASPAList = append(r.ASPAList, aspa)
     return aspa
   } else {
+    log.Debugf("AS%d is not a Tier 1 AS, adding providers to the ASPA list", r.ASNumber)
     aspa := protocols.ASPAObject{CustomerAS: r.ASNumber, ASPASet: []int{}}
     for _, provider := range providers {
       aspa.ASPASet = append(aspa.ASPASet, provider.Router.ASNumber)
     }
+    log.Debugf("AS%d ASPA list: %#v", r.ASNumber, aspa)
+    r.ASPAList = append(r.ASPAList, aspa)
     return aspa
   }
 }
@@ -89,8 +94,11 @@ func (r *Router) NewASPAObject() protocols.ASPAObject {
 // Method for returning humand readable string representation of a router
 func (r Router) ToString() string {
 	var sb strings.Builder
+
 	sb.WriteString(fmt.Sprintf("Router AS%d\n", r.ASNumber))
-	if len(r.Neighbors) > 0 {
+  sb.WriteString(fmt.Sprintf("    Tier %d\n", r.Tier))
+  
+  if len(r.Neighbors) > 0 {
 		sb.WriteString("    Neighbors: [")
     for _, neighbor := range r.Neighbors {
       sb.WriteString(fmt.Sprintf("%v,", neighbor.ToString()))
@@ -158,7 +166,7 @@ func (r *Router) LearnRoute(route *Route) []*Router {
   //   log.Debugf("Route is not valid, since it contains cycle")
   //   return []*Router{}
   // }
-  if r.Policy.AcceptRoute(route) {
+  if !r.Policy.AcceptRoute(route) {
     log.Debugf("Route is not valid according to policy %T", r.Policy)
     return []*Router{}
   }
@@ -167,7 +175,7 @@ func (r *Router) LearnRoute(route *Route) []*Router {
   // if the route in the routing table is preferred over the recieved route then we return 
   // empty list of routers, preference check is done through PreferRoute method
   if existingRoute, ok := r.RouteTable[route.Dest.ASNumber]; ok {
-    if r.Policy.PreferRoute(route, existingRoute){
+    if r.Policy.PreferRoute(existingRoute, route){
       log.Debugf("Route is not valid, since it is not preferred over the existing route")
       return []*Router{}
     }

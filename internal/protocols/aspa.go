@@ -90,13 +90,17 @@ func IsCryptographicallyValid(aspa int) bool {
 // CAS equals to SPAS. In case a CAS has multiple cryptographically valid ASPAs, then 
 // the U-SPAS for the CAS is the union of AS listed in all SPAS of these ASPAs.
 func GetUnionSPAS(aspaList []ASPAObject) []int {
-  var unionSPAS []int
+  unionSPAS := make(map[int]void)
   for _, aspa := range aspaList {
     for _, as := range aspa.ASPASet {
-      unionSPAS = append(unionSPAS, as)
+      unionSPAS[as] = void{}
     }
   }
-  return unionSPAS
+  spases := []int{}
+  for as := range unionSPAS {
+    spases = append(spases, as)
+  }
+  return spases
 }
 
 // Let AS x and AS y represent two unique ASes.  A provider
@@ -124,29 +128,29 @@ func GetUnionSPAS(aspaList []ASPAObject) []int {
 // valid.  The provider authorization function is used in the ASPA-based
 // AS_PATH verification algorithms described in Section 7.2 and
 // Section 7.3.
-func ProviderAuthorization(x, y int, uspaspTable USPASTable) (string, error) {
+func ProviderAuthorization(x, y int, uspaspTable USPASTable) (Relation, error) {
 	// Check if the customer AS (CAS) exists in the U-SPAS table
 	providers, exists := uspaspTable[x]
 	if !exists {
-		return "No Attestation", nil
+		return NoAttestation, nil
 	}
 
 	// Verify the cryptographic validity of all ASPAs
 	for _, aspa := range providers {
 		if !IsCryptographicallyValid(aspa) {
-			return "No Attestation", nil
+			return NoAttestation, nil
 		}
 	}
 
 	// Check if AS y is an attested provider of AS x
 	for _, provider := range providers {
 		if provider == y {
-			return "Provider+", nil
+			return Provider, nil
 		}
 	}
 
 	// Default case: Not Provider+
-	return "Not Provider+", nil
+	return NonProvider, nil
 }
 
 // Maximum and minimum length of up-ramp and down-ramp calculations. These functions are helper functions
@@ -303,5 +307,5 @@ func VerifyDownstreamPath(asPath []int, neighborAS int, uspaspTable USPASTable) 
 func HasASSet(asPath []int) bool {
 	// Stub function: Replace with logic to detect AS_SET in the AS_PATH.
 	// This can involve checking specific encodings or markers that denote AS_SETs in the path.
-	return true 
+	return false 
 }

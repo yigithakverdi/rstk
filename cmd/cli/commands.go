@@ -57,7 +57,7 @@ func (s *State) CInit(args []string) {
   // left to the user, or a default path should be provided, informing the user
   // on this as  well
   fmt.Println("[?] Path is hardcoded, please change the path in the code")
-  path := "/home/yigit/workspace/github/fix/data/test-2/test.as-rel2.txt"
+  path := "/home/yigit/workspace/github/rstk-worktree/rstk-fix/data/test-2/test.as-rel2.txt"
   
   asRelsList, err := parser.GetAsRelationships(path)
   if err != nil {

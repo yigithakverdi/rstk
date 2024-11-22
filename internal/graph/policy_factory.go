@@ -19,17 +19,30 @@ func NewPolicyFactory() *PolicyFactory {
         DefaultPolicy: &router.DefaultPolicy{},
         ASPAPolicy:    &router.ASPAPolicy{
             USPAS: make(protocols.USPASTable),
-            Neighbors: make(map[int]router.Relation),
+            Neighbors: []router.Neighbor{},
             ASNumber: 0,
         }, 
     }
 }
 
-func (pf *PolicyFactory) GetPolicy(asNumber int, topologyType string) router.IPolicy {
+// func (pf *PolicyFactory) GetPolicy(asNumber int, topologyType string) router.IPolicy {
+//     switch topologyType {
+//     case "ASPA":
+//         return pf.ASPAPolicy
+//     default:
+//         return pf.DefaultPolicy
+//     }
+// }
+
+func (pf *PolicyFactory) GetPolicy(asNumber int, topologyType string, neighbors []router.Neighbor) router.IPolicy {
     switch topologyType {
     case "ASPA":
-        return pf.ASPAPolicy
+        return &router.ASPAPolicy{
+            USPAS:     make(protocols.USPASTable),
+            Neighbors: neighbors,
+            ASNumber:  asNumber,
+        }
     default:
-        return pf.DefaultPolicy
+        return &router.DefaultPolicy{}
     }
 }
