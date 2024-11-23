@@ -13,22 +13,15 @@ var _ IPolicy = (*ASPAPolicy)(nil)
 // ASPAPolicy contains everything methods, need. In this case, it contains, U-SPAS table
 // neighbors of the current router, and the current AS number
 type ASPAPolicy struct {  
-  USPAS     protocols.USPASTable
-  Neighbors []Neighbor
-  ASNumber  int
+  // Adding a back reference to the router itself, since I need to access router related
+  // fields instead of recrating them here causing more problems and redundancy
+  Router    *Router
 }
 
-// ASPA Object related operations are also  defined here, below functions are used only for
-// handling the ASPAList containing bunch ASPA objects, later these objects either way 
-// processed by the ASPA protocol, depending on the IETF draft
-// 
-// Notive the difference between other policy methods, these takes also 
-// router instances as well
-func (ap *ASPAPolicy) AddASPA(r Router, aspa protocols.ASPAObject) {
-    r.ASPAList = append(r.ASPAList, aspa)
-}
 
 func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
+    log.Infof("Evaluating route with ASPA policy")
+
     // Get the AS_PATH as a slice of AS numbers
     asPath := route.PathASNumbers()
 
@@ -38,51 +31,55 @@ func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
     }
 
     // Compress the AS_PATH to remove duplicates
+    // TODO not sure about the validty of this method of compressing AS path into
+    // single union of ASes
     compressedPath := protocols.CompressASPath(asPath)
+    log.Infof("Compressed AS_PATH: %v", compressedPath)
 
-    // The neighbor AS is the last AS in the AS_PATH
     neighborAS := compressedPath[len(compressedPath)-1]
+    log.Infof("Neighbor AS: %d", neighborAS)
 
     // Find the neighbor in the slice that matches the neighborAS
     // TODO here trying to find, the last AS in the compressed path in the neighbors list
     // by looping over all the neighbors in the policy struct of the current router
     // which is very inefficient (considering thousands of AS neighbors)
     //
-    // TODO furthemore there is a bad design on the structs such that, Router struct contains
-    // Neighbor list containing neighbor structs. Also Router struct contains Policy struct
-    // which also contains Neighbor struct if policy is set to AS so there is this kind of
-    // redundancy and possible conflicts since Neighbor of Router is updated however Neighbors
-    // in the policy might not
+    // Access neighbors from the router
+    neighbors := ap.Router.Neighbors
+
     var neighbor *Neighbor
     var exists bool
-    for i := range ap.Neighbors {
-        if ap.Neighbors[i].Router.ASNumber == neighborAS {
-            neighbor = &ap.Neighbors[i]
+
+    for i := range neighbors {
+        if neighbors[i].Router.ASNumber == neighborAS {
+            neighbor = &neighbors[i]
             exists = true
             break
         }
     }
+    fmt.Println()
 
     if !exists {
-        log.Warnf("Neighbor AS%d not found in neighbor relations for AS%d", neighborAS, ap.ASNumber)
+        log.Warnf("Neighbor AS%d not found in neighbor relations for AS%d", neighborAS, ap.Router.ASNumber)
         // Decide how to handle unknown neighbor relations (e.g., treat as Invalid)
         return false
     }
       
     var neighborRelation Relation = neighbor.Relation
     var outcome protocols.Outcome
+    log.Infof("Neighbor relation: %v", neighborRelation)
 
     // Apply the appropriate verification algorithm based on neighbor relation
     switch neighborRelation {
     case Customer, Peer:
         // Use the upstream verification algorithm
         // asPath []int, neighborAS int, isRSClient bool, uspaspTable USPASTable
-        log.Infof("AS%d verifying route to AS%d: ASPA validation", ap.ASNumber, route.Dest.ASNumber)
-        outcome = protocols.VerifyUpstreamPath(compressedPath, neighborAS, true, ap.USPAS)
+        log.Infof("AS%d verifying route to AS%d: ASPA validation", ap.Router.ASNumber, route.Dest.ASNumber)
+        outcome = protocols.VerifyUpstreamPath(compressedPath, neighborAS, true, ap.Router.USPAS)
     case Provider:
         // Use the downstream verification algorithm
-        log.Infof("AS%d verifying route to AS%d: ASPA validation", ap.ASNumber, route.Dest.ASNumber)
-        outcome = protocols.VerifyDownstreamPath(compressedPath, neighborAS, ap.USPAS)
+        log.Infof("AS%d verifying route to AS%d: ASPA validation", ap.Router.ASNumber, route.Dest.ASNumber)
+        outcome = protocols.VerifyDownstreamPath(compressedPath, neighborAS, ap.Router.USPAS)
     default:
         // If relation is unknown or complex, treat as Invalid
         log.Warnf("Unknown or unsupported neighbor relation for AS%d", neighborAS)
@@ -90,23 +87,12 @@ func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
     }
 
     if outcome == protocols.Valid {
-        log.Infof("AS%d accepted route to AS%d: ASPA validation %s", ap.ASNumber, route.Dest.ASNumber, outcome)
+        log.Infof("AS%d accepted route to AS%d: ASPA validation %s", ap.Router.ASNumber, route.Dest.ASNumber, outcome)
         return true
     } else {
-        log.Infof("AS%d rejected route to AS%d: ASPA validation %s", ap.ASNumber, route.Dest.ASNumber, outcome)
+        log.Infof("AS%d rejected route to AS%d: ASPA validation %s", ap.Router.ASNumber, route.Dest.ASNumber, outcome)
         return false
     }
-}
-
-
-
-
-// UpdateASPATable updates the ASPA table based on the router's ASPAList
-func (ap *ASPAPolicy) UpdateASPATable(aspaList []protocols.ASPAObject) {
-    for _, aspa := range aspaList {
-        ap.USPAS[int(aspa.CustomerAS)] = aspa.ASPASet
-    }
-    log.Infof("ASPA table updated: %+v", ap.USPAS)
 }
 
 // Method for preferring route, by comparing the two routes, and choosing the preferred one

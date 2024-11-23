@@ -1,24 +1,23 @@
 package cli
 
 import (
-  // Core library imports
-  "fmt"
-  "strconv"
+	// Core library imports
+	"fmt"
+	"strconv"
 
-  // Internal library imports
-  "rstk/internal/router"
-  "rstk/internal/graph"
-  "rstk/internal/parser"
-
-  // Github library imports
-  // "github.com/peterh/liner"
+	// Internal library imports
+	"rstk/internal/graph"
+	"rstk/internal/parser"
+	"rstk/internal/protocols"
+	"rstk/internal/router"
+	// Github library imports
+	// "github.com/peterh/liner"
 )
 
-// Create new ASPA object for a given router (AS number)
-func (s *State) CCreateASPA(args []string) {
-  // First checking the arguments
+func (s *State) CCreateASPAObject(args []string) {
+  // Argument check
   if len(args) != 1 {
-    fmt.Println("[!] Usage: create-aspa <AS>")
+    fmt.Println("[!] Usage: create-aspa-object <AS>")
     return
   }
 
@@ -37,11 +36,76 @@ func (s *State) CCreateASPA(args []string) {
   asHash := fmt.Sprintf("r%d", asNumber)
 
   // Getting the router from the topology
-  router := t.GetRouter(asHash)
+  r := t.GetRouter(asHash)
 
-  // Creating ASPA for the given router
-  fmt.Println("[+] Creating ASPA for the router...")
-  router.NewASPAObject()
+  // Creating ASPA object for the router
+  fmt.Println("[+] Creating ASPA object for the router...")
+  aspa := r.NewASPAObject()
+  fmt.Println(aspa)
+}
+
+func (s *State) CCheckRouterASPACompliance(args []string) {
+  // Argument check
+  if len(args) != 1 {
+    fmt.Println("[!] Usage: check-router-aspa-compliance <AS>")
+    return
+  }
+
+  // Getting the topology from the state
+  t := s.Topology
+
+  // Casting the string to integer then hashing it then, accessing it via
+  // GetRouter method since the method requires hashed version of the idenfitifer
+  // of the router
+  as := args[0]
+
+  // Casting it to integer
+  asNumber, _ := strconv.Atoi(as)
+  
+  // Hashing the as number (int) to hashed string version of it
+  asHash := fmt.Sprintf("r%d", asNumber)
+
+  // Getting the router from the topology
+  r := t.GetRouter(asHash)
+
+  // Checking the ASPA compliance of the router
+  fmt.Println("[+] Checking ASPA compliance of the router...")
+  if protocols.IsCompliantAS(r.ASPAList) {
+    fmt.Println("[+] Router is ASPA compliant")
+  } else {
+    fmt.Println("[!] Router is not ASPA compliant")
+  }
+}
+
+func (s *State) CGenerateASPAObject(args []string) {
+  // Argument check. First of all there are two different type of ASPA object creation
+  // one is random, and the other one is assigning ASPA objects to all of the routers
+  // in the Topology
+  if(len(args) != 1) {
+    fmt.Println("[!] Usage: generate-aspa-object <random|all>")
+    return
+  }
+
+  // Getting the topology from the State
+  t := s.Topology
+
+  // Getting the argument
+  arg := args[0]
+
+  // If the argument is random, then generate a random ASPA object for a random router
+  if arg == "random" {
+    fmt.Println("[+] Generating random ASPA object for a random router...")
+    t.CreateASPAObjectsRandomly(50)
+  }
+
+  // If the argument is all, then generate ASPA objects for all the routers in the topology
+  if arg == "all" {
+    fmt.Println("[+] Generating ASPA objects for all routers...")
+    t.CreateASPAObjectsRandomly(100)
+  }
+
+  // Informing the user about the state change
+  fmt.Println("[?] State updated")
 }
 
 // Command that initializes the topology with the given AS relationships

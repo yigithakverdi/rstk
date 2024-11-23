@@ -32,7 +32,7 @@ const (
 // }
 // Union of SPAS, An AS MUST list in its SPAS the union of all its Provider AS(es)
 // and non-transparent RS AS(es) at which it is an RS-client
-type USPASTable map[int][]int
+type USPASTable map[int]void
 
 
 // Global types and variables
@@ -89,18 +89,14 @@ func IsCryptographicallyValid(aspa int) bool {
 // If a CAS has single cryptographically valid ASPA, then the Union SPAS (U-SPAS) for the
 // CAS equals to SPAS. In case a CAS has multiple cryptographically valid ASPAs, then 
 // the U-SPAS for the CAS is the union of AS listed in all SPAS of these ASPAs.
-func GetUnionSPAS(aspaList []ASPAObject) []int {
+func GetUnionSPAS(aspaList []ASPAObject) map[int]void {
   unionSPAS := make(map[int]void)
   for _, aspa := range aspaList {
     for _, as := range aspa.ASPASet {
       unionSPAS[as] = void{}
     }
   }
-  spases := []int{}
-  for as := range unionSPAS {
-    spases = append(spases, as)
-  }
-  return spases
+  return unionSPAS 
 }
 
 // Let AS x and AS y represent two unique ASes.  A provider
@@ -128,22 +124,22 @@ func GetUnionSPAS(aspaList []ASPAObject) []int {
 // valid.  The provider authorization function is used in the ASPA-based
 // AS_PATH verification algorithms described in Section 7.2 and
 // Section 7.3.
-func ProviderAuthorization(x, y int, uspaspTable USPASTable) (Relation, error) {
+func ProviderAuthorization(x, y int, uspasTable USPASTable) (Relation, error) {
 	// Check if the customer AS (CAS) exists in the U-SPAS table
-	providers, exists := uspaspTable[x]
+	_, exists := uspasTable[x]
 	if !exists {
 		return NoAttestation, nil
 	}
 
 	// Verify the cryptographic validity of all ASPAs
-	for _, aspa := range providers {
-		if !IsCryptographicallyValid(aspa) {
+	for provider := range uspasTable {
+		if !IsCryptographicallyValid(provider) {
 			return NoAttestation, nil
 		}
 	}
 
 	// Check if AS y is an attested provider of AS x
-	for _, provider := range providers {
+	for provider := range uspasTable {
 		if provider == y {
 			return Provider, nil
 		}
@@ -168,7 +164,7 @@ func CalculateMaxUpRamp(asPath []int, uspaspTable USPASTable) int {
 	n := len(asPath)
 	for i := 0; i < n-1; i++ {
 		authResult, _ := ProviderAuthorization(asPath[i], asPath[i+1], uspaspTable)
-		if authResult == "Not Provider+" {
+		if authResult == NonProvider {
 			return i
 		}
 	}
@@ -180,7 +176,7 @@ func CalculateMinUpRamp(asPath []int, uspaspTable USPASTable) int {
 	n := len(asPath)
 	for i := 0; i < n-1; i++ {
 		authResult, _ := ProviderAuthorization(asPath[i], asPath[i+1], uspaspTable)
-		if authResult == "Not Provider+" || authResult == "No Attestation" {
+		if authResult == NonProvider || authResult == NoAttestation {
 			return i
 		}
 	}
@@ -192,7 +188,7 @@ func CalculateMaxDownRamp(asPath []int, uspaspTable USPASTable) int {
 	n := len(asPath)
 	for j := n - 1; j > 0; j-- {
 		authResult, _ := ProviderAuthorization(asPath[j], asPath[j-1], uspaspTable)
-		if authResult == "Not Provider+" {
+		if authResult == NonProvider {
 			return n - j
 		}
 	}
@@ -204,7 +200,7 @@ func CalculateMinDownRamp(asPath []int, uspaspTable USPASTable) int {
 	n := len(asPath)
 	for j := n - 1; j > 0; j-- {
 		authResult, _ := ProviderAuthorization(asPath[j], asPath[j-1], uspaspTable)
-		if authResult == "Not Provider+" || authResult == "No Attestation" {
+		if authResult == NonProvider || authResult == NoAttestation {
 			return n - j
 		}
 	}
@@ -232,17 +228,17 @@ func VerifyUpstreamPath(asPath []int, neighborAS int, isRSClient bool, uspaspTab
 
 	// 1. If the AS_PATH is empty
 	if n == 0 {
-		return Outcome("Invalid")
+		return Invalid
 	}
 
 	// 2. If the receiving AS is not an RS-client and the most recently added AS does not match the neighbor AS
 	if !isRSClient && asPath[n-1] != neighborAS {
-		return Outcome("Invalid")
+		return Invalid
 	}
 
 	// 3. If the AS_PATH has an AS_SET
 	if HasASSet(asPath) {
-		return Outcome("Invalid")
+		return Invalid
 	}
 
 	// Calculate ramp lengths
@@ -251,16 +247,16 @@ func VerifyUpstreamPath(asPath []int, neighborAS int, isRSClient bool, uspaspTab
 
 	// 4. If max_up_ramp < N
 	if maxUpRamp < n {
-		return Outcome("Invalid")
+		return Invalid
 	}
 
 	// 5. If min_up_ramp < N
 	if minUpRamp < n {
-		return Outcome("Unknown")
+		return Unknown
 	}
 
 	// 6. Else, the procedure halts with the outcome "Valid"
-	return Outcome("Valid")
+	return Valid
 }
 
 // The downstream verification algorithm described here is applied when a route is received from a
@@ -271,17 +267,17 @@ func VerifyDownstreamPath(asPath []int, neighborAS int, uspaspTable USPASTable) 
 
 	// 1. If the AS_PATH is empty
 	if n == 0 {
-		return Outcome("Invalid")
+		return Invalid
 	}
 
 	// 2. If the most recently added AS does not match the neighbor AS
 	if asPath[n-1] != neighborAS {
-		return Outcome("Invalid")
+		return Invalid
 	}
 
 	// 3. If the AS_PATH has an AS_SET
 	if HasASSet(asPath) {
-		return Outcome("Invalid")
+		return Invalid
 	}
 
 	// Calculate ramp lengths
@@ -292,16 +288,16 @@ func VerifyDownstreamPath(asPath []int, neighborAS int, uspaspTable USPASTable) 
 
 	// 4. If max_up_ramp + max_down_ramp < N
 	if maxUpRamp+maxDownRamp < n {
-		return Outcome("Invalid")
+		return Invalid
 	}
 
 	// 5. If min_up_ramp + min_down_ramp < N
 	if minUpRamp+minDownRamp < n {
-		return Outcome("Unknown")
+		return Unknown
 	}
 
 	// 6. Else, the procedure halts with the outcome "Valid"
-	return Outcome("Valid")
+	return Valid
 }
 
 func HasASSet(asPath []int) bool {

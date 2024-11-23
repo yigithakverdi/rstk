@@ -3,6 +3,8 @@ package graph
 import (
 	// Core imports
 	"fmt"
+  "math/rand"
+  "math"
 
 	// Internal packages
 	"rstk/internal/parser"
@@ -82,14 +84,14 @@ func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.
   // will be set according to below topology type, types are based on the `policy_factory.go`
   // GetPolicy function, later on also this should be moved to elsewhere, and be more
   // configurable, or user should be able to define their own policies
-  t.TopologyType = "ASPA"
+  t.TopologyType = "Default"
   log.Infof("Initializing topology with %s topology type for all routers", t.TopologyType)
-  
+
+  // Initialize the policy factory with the default PolicyFactory
+  t.PolicyFactory = NewPolicyFactory()
+
   // Store ASes in lookup table for easy access
   ases := make(map[int]*router.Router)
-
-  // Initialize the policy factory
-  t.PolicyFactory = NewPolicyFactory() 
 
   // Nodes are represented as hashed route values
   routerHash := func(r *router.Router) string {
@@ -132,7 +134,7 @@ func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.
     }
     ases[as1].Neighbors = append(ases[as1].Neighbors, neighbor1)
     ases[as1].Tier = t.SetTier(ases[as1].Neighbors)
-    ases[as1].Policy = t.PolicyFactory.GetPolicy(as1, t.TopologyType, ases[as1].Neighbors)
+    ases[as1].Policy = t.PolicyFactory.GetPolicy(t.TopologyType, ases[as1])
 
     // For bidirectional relationships
     neighbor2 := router.Neighbor{
@@ -141,8 +143,7 @@ func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.
     }
     ases[as2].Neighbors = append(ases[as2].Neighbors, neighbor2)
     ases[as2].Tier = t.SetTier(ases[as2].Neighbors)
-    ases[as2].Policy = t.PolicyFactory.GetPolicy(as1, t.TopologyType, ases[as2].Neighbors)
-
+    ases[as2].Policy = t.PolicyFactory.GetPolicy(t.TopologyType, ases[as2])
     
     // TODO Step X: Policy initialization, is also needed since when learning or finding routes to
     // a given AS, policies are checked first
@@ -395,5 +396,33 @@ func (t* Topology) BuildReachabilityGraph() {
 
 }
 
+// ASPA related methods, deploying ASPA objects to the routers with specified configurations such as random
+// or to all etc.
+func (t *Topology) CreateASPAObjectsRandomly(deploymentFraction float64) {
+    log.Infof("Deploying ASPA objects to %v%% of the routers", deploymentFraction)
 
+    // Calculate number of ASes to create ASPA objects for
+    numASesToDeploy := int(math.Round(float64(len(t.AdjMap)) * deploymentFraction / 100.0))
+    
+    // Create a slice of AS IDs
+    asIDs := make([]string, 0, len(t.AdjMap))
+    for asID := range t.AdjMap {
+        asIDs = append(asIDs, asID)
+    }
+    
+    // Randomly sample AS IDs
+    shuffledASIDs := rand.Perm(len(asIDs))
+    
+    // Create ASPA objects for selected ASes
+    for i := 0; i < numASesToDeploy; i++ {
+        asID := asIDs[shuffledASIDs[i]]
+        log.Infof("Creating ASPA object for AS%v", asID)
+        r := t.GetRouter(asID)
+        if r == nil {
+          log.Warnf("Router with AS%v not found", asID)
+          continue
+        }
+        r.NewASPAObject()
+    }
+}
 

@@ -82,8 +82,12 @@ func Run(args []string) {
       Description: "Add a router to the topology",
     },
     "create-aspa": {
-      Execute: func(args []string) { state.CCreateASPA(args) },
-      Description: "Create an ASPA",
+      Execute: func(args []string) { state.CCreateASPAObject(args) },
+      Description: "Create an ASPA policy",
+    },
+    "generate-aspa": {
+      Execute: func(args []string) { state.CGenerateASPAObject(args) },
+      Description: "Generate ASPA objects for all routers",
     },
   }
 

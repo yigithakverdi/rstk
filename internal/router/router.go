@@ -1,15 +1,16 @@
 package router
 
 import (
-  // Core library encodings
-  "fmt"
-  "strings"
+	// Core library encodings
+	"fmt"
+	"rstk/internal/protocols"
+	"strings"
 
-  // Internal libraries
-  "rstk/internal/protocols"
+	// Internal libraries
+	// "rstk/internal/protocols"
 
-  // Github packages
-  log "github.com/sirupsen/logrus"
+	// Github packages
+	log "github.com/sirupsen/logrus"
 )
 
 // Main node structure, encapsulate all of the router related logic, such as routing,
@@ -54,41 +55,15 @@ type Router struct {
   Tier          int
   Policy        IPolicy
 
-  // BGP routing related fields
-  BGPSecEnabled bool
-
-  // Contains list of ASPA objects could be one or more, it is used in
-  // protocols/aspa.go 
+  // More protocol related fields
   ASPAList      []protocols.ASPAObject
+  USPAS         protocols.USPASTable
+  BGPSecEnabled bool
 }
 
 // Method for returning human readable string format of the neighbor
 func (n Neighbor) ToString() string {
 	return fmt.Sprintf("<AS%d (%d)>", n.Router.ASNumber, n.Relation)
-}
-
-// TODO An AS must include a Provider AS, in its SPAS, regardless of whether it provides connectivity
-// if no provider AS is present for the CAS then AS0 must be included in the SPAS
-//
-// Create new ASPA object and return it, methodology is based on IETF draft. If AS does not have
-// any provider it contains AS0 (by default every one of them)
-func (r *Router) NewASPAObject() protocols.ASPAObject {
-  providers := r.GetProviders()
-  if(r.Tier == 1) {
-    log.Debugf("AS%d is a Tier 1 AS, adding AS0 to the ASPA list", r.ASNumber)
-    aspa := protocols.ASPAObject{CustomerAS: r.ASNumber, ASPASet: []int{0}}
-    r.ASPAList = append(r.ASPAList, aspa)
-    return aspa
-  } else {
-    log.Debugf("AS%d is not a Tier 1 AS, adding providers to the ASPA list", r.ASNumber)
-    aspa := protocols.ASPAObject{CustomerAS: r.ASNumber, ASPASet: []int{}}
-    for _, provider := range providers {
-      aspa.ASPASet = append(aspa.ASPASet, provider.Router.ASNumber)
-    }
-    log.Debugf("AS%d ASPA list: %#v", r.ASNumber, aspa)
-    r.ASPAList = append(r.ASPAList, aspa)
-    return aspa
-  }
 }
 
 // Method for returning humand readable string representation of a router
@@ -175,7 +150,7 @@ func (r *Router) LearnRoute(route *Route) []*Router {
   // if the route in the routing table is preferred over the recieved route then we return 
   // empty list of routers, preference check is done through PreferRoute method
   if existingRoute, ok := r.RouteTable[route.Dest.ASNumber]; ok {
-    if r.Policy.PreferRoute(existingRoute, route){
+    if !r.Policy.PreferRoute(existingRoute, route){
       log.Debugf("Route is not valid, since it is not preferred over the existing route")
       return []*Router{}
     }
@@ -284,4 +259,53 @@ func (r *Router) ForwardRoute(route *Route, nextHop *Router) *Route {
         Authenticated:   true,
     }
 }
+
+// ASPA related methods are handled here temporarly, later on this might be abstracted with the an 
+// intermidiate layer, where all protocols are can be plugged in etc. ASPA related method for initializing 
+// ASPA object for the given router. Once the ASPA object is created it is added to the ASPA list of the
+// router instance
+func (r *Router) NewASPAObject() protocols.ASPAObject {
+  // As per the IETF draft, if the router is Tier 1 then the ASPA object should be   
+  // [AS-Current, AS0]
+  if(r.Tier == 1) {
+    aspa := protocols.ASPAObject{
+      CustomerAS: r.ASNumber,
+      ASPASet:    []int{0},
+      Signature:  []byte{},
+    }
+    r.ASPAList = append(r.ASPAList, aspa)
+    r.UpdateUSPASTable()
+    return aspa
+  } else {
+    // TODO again very inefficient what we are doing here, looping over all the neighbors
+    // and obtaining AS numbers, and creating a new list etc.
+    providers := r.GetProviders()
+    asNumbers := make([]int, 0, len(providers))
+    for _, provider := range providers {
+      asNumbers = append(asNumbers, provider.Router.ASNumber)
+      fmt.Println(asNumbers)
+    }
+    aspa := protocols.ASPAObject{
+      CustomerAS: r.ASNumber,
+      ASPASet:    asNumbers, 
+      Signature:  []byte{},
+    }
+    r.ASPAList = append(r.ASPAList, aspa)
+    r.UpdateUSPASTable()
+    return aspa
+  }
+}
+
+func (r *Router) UpdateUSPASTable() {
+  uspas := protocols.GetUnionSPAS(r.ASPAList)
+  r.USPAS = uspas
+  log.Infof("AS%d updated USPAS table: %v", r.ASNumber, r.USPAS)
+}
+  
+
+func (r *Router) AddASPAObject(aspa protocols.ASPAObject) {
+  r.ASPAList = append(r.ASPAList, aspa)
+  r.UpdateUSPASTable()
+}
+
 
