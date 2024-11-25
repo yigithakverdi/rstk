@@ -89,6 +89,10 @@ func Run(args []string) {
       Execute: func(args []string) { state.CGenerateASPAObject(args) },
       Description: "Generate ASPA objects for all routers",
     },
+    "show-rpki": {
+      Execute: func(args []string) { state.CCheckRPKIStatus() },
+      Description: "Show RPKI information",
+    },
   }
 
   // Add help command later on to show available commands

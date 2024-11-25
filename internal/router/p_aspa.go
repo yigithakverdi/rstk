@@ -3,6 +3,7 @@ package router
 
 import (
   "fmt"
+  "strings"
   "rstk/internal/protocols"
   log "github.com/sirupsen/logrus"
 )
@@ -17,7 +18,6 @@ type ASPAPolicy struct {
   // fields instead of recrating them here causing more problems and redundancy
   Router    *Router
 }
-
 
 func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
     log.Infof("Evaluating route with ASPA policy")
@@ -36,7 +36,8 @@ func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
     compressedPath := protocols.CompressASPath(asPath)
     log.Infof("Compressed AS_PATH: %v", compressedPath)
 
-    neighborAS := compressedPath[len(compressedPath)-1]
+
+    neighborAS := compressedPath[len(compressedPath)-2]
     log.Infof("Neighbor AS: %d", neighborAS)
 
     // Find the neighbor in the slice that matches the neighborAS
@@ -45,7 +46,13 @@ func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
     // which is very inefficient (considering thousands of AS neighbors)
     //
     // Access neighbors from the router
+    var sb strings.Builder
     neighbors := ap.Router.Neighbors
+    sb.WriteString(fmt.Sprintf("Neighbor: "))
+    for _, neighbor := range neighbors {
+      sb.WriteString(fmt.Sprintf("%d ", neighbor.Router.ASNumber))
+    }
+    log.Infof(sb.String())
 
     var neighbor *Neighbor
     var exists bool
@@ -70,16 +77,27 @@ func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
     log.Infof("Neighbor relation: %v", neighborRelation)
 
     // Apply the appropriate verification algorithm based on neighbor relation
+    log.Infof("Fetching RPKI instance")
+    
+    // Initializing U_SPAS table from RPKI.ASPA of the current router
+    USPAS := ap.Router.ASPA.USPAS
+
+    log.Infof("S-USPAS validation %v", USPAS)
     switch neighborRelation {
     case Customer, Peer:
         // Use the upstream verification algorithm
         // asPath []int, neighborAS int, isRSClient bool, uspaspTable USPASTable
+        log.Infof("Evaluating under customer or peer relation")
         log.Infof("AS%d verifying route to AS%d: ASPA validation", ap.Router.ASNumber, route.Dest.ASNumber)
-        outcome = protocols.VerifyUpstreamPath(compressedPath, neighborAS, true, ap.Router.USPAS)
+        // outcome = protocols.VerifyUpstreamPath(compressedPath, neighborAS, true, USPAS)
+        outcome = protocols.VerifyDownstreamPath(compressedPath, neighborAS, USPAS)        
     case Provider:
         // Use the downstream verification algorithm
+        log.Infof("Evaluating under provider relation")
         log.Infof("AS%d verifying route to AS%d: ASPA validation", ap.Router.ASNumber, route.Dest.ASNumber)
-        outcome = protocols.VerifyDownstreamPath(compressedPath, neighborAS, ap.Router.USPAS)
+        // outcome = protocols.VerifyDownstreamPath(compressedPath, neighborAS, USPAS)
+        outcome = protocols.VerifyUpstreamPath(compressedPath, neighborAS, true, USPAS)
+  
     default:
         // If relation is unknown or complex, treat as Invalid
         log.Warnf("Unknown or unsupported neighbor relation for AS%d", neighborAS)
@@ -153,3 +171,4 @@ func (ap *ASPAPolicy) ForwardTo(route *Route, relation Relation) bool {
 
   return firstHopRel == Customer || relation == Customer  
 }
+

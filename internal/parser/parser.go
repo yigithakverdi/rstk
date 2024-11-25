@@ -8,6 +8,16 @@ import (
   "bufio"
 )
 
+// TODO Syntax check on the AS relation file should be implemented, few checks that comes to my mind
+// is as follows:
+// 1. Check ignoring the comments, are they also processed etc.
+// 2. Relations should be bidireacitonal meaning, for sample x|y|0 there shouldn't be y|x|0
+//    or for x|y|-1 there shouldn't be y|x|-1
+// 3. AS numbers should be positive integers, and relations should be integers
+// 4. Source should be a string, and should be present in the file
+// 5. Basic checks, such as file empty, etc.
+// 6. Ignoring empty lines, and lines with only comments
+
 // Struct for stroing AS relationships in a meaningful way so that we can easily access 
 // which AS we want and their relationships, and store them instances in a list
 type AsRel struct {
@@ -74,6 +84,9 @@ func GetAsRelationships(path string) ([]AsRel, error) {
   scanner := bufio.NewScanner(file)
   for scanner.Scan() {
     line := scanner.Text()
+    if len(line) == 0 {
+      continue
+    }
     if(line[0] == '#') {
       continue
     }

@@ -10,9 +10,21 @@ import (
 	"rstk/internal/parser"
 	"rstk/internal/protocols"
 	"rstk/internal/router"
-	// Github library imports
-	// "github.com/peterh/liner"
+	
+  // Github library imports
+  "github.com/kr/pretty"
 )
+
+func (s *State) CCheckRPKIStatus() {
+  // Getting the topology from the state
+  t := s.Topology
+
+  // Checking the RPKI status of the router
+  fmt.Println("[+] Checking RPKI status of the router...")
+  pretty.Printf("%# v\n", t.RPKI)
+  
+
+}
 
 func (s *State) CCreateASPAObject(args []string) {
   // Argument check
@@ -40,8 +52,8 @@ func (s *State) CCreateASPAObject(args []string) {
 
   // Creating ASPA object for the router
   fmt.Println("[+] Creating ASPA object for the router...")
-  aspa := r.NewASPAObject()
-  fmt.Println(aspa)
+  _, uspas := r.NewASPAObject()
+  fmt.Println(uspas)
 }
 
 func (s *State) CCheckRouterASPACompliance(args []string) {

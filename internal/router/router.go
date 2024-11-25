@@ -4,6 +4,8 @@ import (
 	// Core library encodings
 	"fmt"
 	"rstk/internal/protocols"
+  "rstk/internal/common"
+  "rstk/internal/rpki"
 	"strings"
 
 	// Internal libraries
@@ -22,6 +24,9 @@ import (
 
 // Relation is a type for storing AS relationships
 type Relation int
+
+// Void type from common
+type void = common.Void
 
 // Constants for AS relationships
 //
@@ -57,8 +62,10 @@ type Router struct {
 
   // More protocol related fields
   ASPAList      []protocols.ASPAObject
-  USPAS         protocols.USPASTable
   BGPSecEnabled bool
+
+  // RPKI related fields
+  ASPA         rpki.ASPA
 }
 
 // Method for returning human readable string format of the neighbor
@@ -166,8 +173,6 @@ func (r *Router) LearnRoute(route *Route) []*Router {
   log.Infof("Router state after adding route:\n%s", r.ToString())
 
   // Deciding which neighbor should receive the propagation of current route recieved
-  // it is done through ForwardTo method, which is implemented in the policy, for now
-  // it is checking if the first hop is customer or not, if it is then the route is forwarded
   // to the first hop, if not then it is not forwarded
   forwardToRelations := make(map[Relation]bool)
   allRelations := []Relation{Customer, Peer, Provider}
@@ -264,7 +269,7 @@ func (r *Router) ForwardRoute(route *Route, nextHop *Router) *Route {
 // intermidiate layer, where all protocols are can be plugged in etc. ASPA related method for initializing 
 // ASPA object for the given router. Once the ASPA object is created it is added to the ASPA list of the
 // router instance
-func (r *Router) NewASPAObject() protocols.ASPAObject {
+func (r *Router) NewASPAObject() (protocols.ASPAObject, map[int]void) {
   // As per the IETF draft, if the router is Tier 1 then the ASPA object should be   
   // [AS-Current, AS0]
   if(r.Tier == 1) {
@@ -274,8 +279,8 @@ func (r *Router) NewASPAObject() protocols.ASPAObject {
       Signature:  []byte{},
     }
     r.ASPAList = append(r.ASPAList, aspa)
-    r.UpdateUSPASTable()
-    return aspa
+    uspas := protocols.GetUnionSPAS(r.ASPAList)
+    return aspa, uspas
   } else {
     // TODO again very inefficient what we are doing here, looping over all the neighbors
     // and obtaining AS numbers, and creating a new list etc.
@@ -291,21 +296,11 @@ func (r *Router) NewASPAObject() protocols.ASPAObject {
       Signature:  []byte{},
     }
     r.ASPAList = append(r.ASPAList, aspa)
-    r.UpdateUSPASTable()
-    return aspa
+    uspas := protocols.GetUnionSPAS(r.ASPAList)    
+    return aspa, uspas
   }
 }
 
-func (r *Router) UpdateUSPASTable() {
-  uspas := protocols.GetUnionSPAS(r.ASPAList)
-  r.USPAS = uspas
-  log.Infof("AS%d updated USPAS table: %v", r.ASNumber, r.USPAS)
-}
-  
-
 func (r *Router) AddASPAObject(aspa protocols.ASPAObject) {
   r.ASPAList = append(r.ASPAList, aspa)
-  r.UpdateUSPASTable()
 }
-
-

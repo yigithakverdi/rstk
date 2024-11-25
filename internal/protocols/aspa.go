@@ -1,5 +1,10 @@
 package protocols 
 
+import (
+  log "github.com/sirupsen/logrus"
+  "rstk/internal/common"
+)
+
 // This file contains the implementation of the ASPA protocol, as described in the IETF draft
 // It contains following definitions respectively:
 //    - Data structures
@@ -24,19 +29,13 @@ const (
   NoAttestation Relation = "NoAttestation"   // A hop where the relationship isn't confirmed or attested by ASPA
 )
 
-// Define the U-SPAS table as a map of AS x (Customer AS) to its attested providers.
-// Simulate the U-SPAS table.
-// var uspaspTable = USPASTable{
-// 	99: {200, 300},   // AS 200 and 300 are attested providers for AS 100
-// 	100: {201},       // AS 201 is an attested provider for AS 101
-// }
 // Union of SPAS, An AS MUST list in its SPAS the union of all its Provider AS(es)
 // and non-transparent RS AS(es) at which it is an RS-client
-type USPASTable map[int]void
+type USPASTable map[int]map[int]void
 
 
 // Global types and variables
-type void struct{}
+type void = common.Void
 
 // IETF Draft: draft-ietf-sidrops-aspa-verification-19
 // Direct link: https://datatracker.ietf.org/doc/draft-ietf-sidrops-aspa-verification/
@@ -60,9 +59,9 @@ type void struct{}
 // Provider ASes (SPAS) of the CAS (AS x).  A CAS is expected to register a single ASPA 
 // listing all its Provider ASes
 type ASPAObject struct {
-  CustomerAS int   // CAS AS x
-  ASPASet []int    // PAS AS y1, AS y2, ...
-  Signature []byte    // Signature of the ASPA object
+  CustomerAS  int      // CAS AS x
+  ASPASet     []int    // PAS AS y1, AS y2, ...
+  Signature   []byte   // Signature of the ASPA object
 }
 
 // A compliant AS should register a single ASPA, to prevent race conditions, during ASPA
@@ -90,13 +89,13 @@ func IsCryptographicallyValid(aspa int) bool {
 // CAS equals to SPAS. In case a CAS has multiple cryptographically valid ASPAs, then 
 // the U-SPAS for the CAS is the union of AS listed in all SPAS of these ASPAs.
 func GetUnionSPAS(aspaList []ASPAObject) map[int]void {
-  unionSPAS := make(map[int]void)
+  unionSPAS := make(map[int]void)  
   for _, aspa := range aspaList {
     for _, as := range aspa.ASPASet {
       unionSPAS[as] = void{}
     }
   }
-  return unionSPAS 
+  return unionSPAS
 }
 
 // Let AS x and AS y represent two unique ASes.  A provider
@@ -128,24 +127,34 @@ func ProviderAuthorization(x, y int, uspasTable USPASTable) (Relation, error) {
 	// Check if the customer AS (CAS) exists in the U-SPAS table
 	_, exists := uspasTable[x]
 	if !exists {
+    log.Warnf("No attestation for CAS %d", x)
 		return NoAttestation, nil
 	}
 
-	// Verify the cryptographic validity of all ASPAs
-	for provider := range uspasTable {
-		if !IsCryptographicallyValid(provider) {
-			return NoAttestation, nil
-		}
-	}
+  // Verify that at least one ASPA is cryptographically valid
+  // TODO for temporarly disabling this check
+  // hasValidASPA := false
+  // for provider := range uspasTable {
+  //     if IsCryptographicallyValid(provider) {
+  //         log.Info("Found a valid ASPA")
+  //         hasValidASPA = true
+  //         break
+  //     }
+  // }
+  // if !hasValidASPA {
+  //     log.Infof("Has no valid ASPA")
+  //     return NoAttestation, nil
+  // }
 
-	// Check if AS y is an attested provider of AS x
-	for provider := range uspasTable {
-		if provider == y {
-			return Provider, nil
-		}
-	}
+	// Check if AS y is an attested provider of AS x, out of the U-SPAS table
+  // that is in the structure of map[int]map[int]void
+  if _, exists := uspasTable[x][y]; exists {
+    log.Infof("AS %d is an attested provider of AS %d", y, x)
+    return Provider, nil
+  }
 
 	// Default case: Not Provider+
+  log.Infof("AS %d is not an attested provider of AS %d", y, x)
 	return NonProvider, nil
 }
 
@@ -163,6 +172,7 @@ func ProviderAuthorization(x, y int, uspasTable USPASTable) (Relation, error) {
 func CalculateMaxUpRamp(asPath []int, uspaspTable USPASTable) int {
 	n := len(asPath)
 	for i := 0; i < n-1; i++ {
+    log.Infof("Calculating up-ramp for AS x:%d to AS y:%d on U-SPAS table %d", asPath[i], asPath[i+1], uspaspTable)
 		authResult, _ := ProviderAuthorization(asPath[i], asPath[i+1], uspaspTable)
 		if authResult == NonProvider {
 			return i
@@ -189,10 +199,10 @@ func CalculateMaxDownRamp(asPath []int, uspaspTable USPASTable) int {
 	for j := n - 1; j > 0; j-- {
 		authResult, _ := ProviderAuthorization(asPath[j], asPath[j-1], uspaspTable)
 		if authResult == NonProvider {
-			return n - j
+			return n - j + 1
 		}
 	}
-	return n - 1
+	return n 
 }
 
 // CalculateMinDownRamp calculates the minimum down-ramp length.
@@ -201,10 +211,10 @@ func CalculateMinDownRamp(asPath []int, uspaspTable USPASTable) int {
 	for j := n - 1; j > 0; j-- {
 		authResult, _ := ProviderAuthorization(asPath[j], asPath[j-1], uspaspTable)
 		if authResult == NonProvider || authResult == NoAttestation {
-			return n - j
+			return n - j + 1
 		}
 	}
-	return n - 1
+	return n
 }
 
 // This function compresses the AS path to remove duplicates or sequences that don't affect validation.
@@ -225,37 +235,45 @@ func CompressASPath(asPath []int) []int {
 // min_down_ramp are set to 0.
 func VerifyUpstreamPath(asPath []int, neighborAS int, isRSClient bool, uspaspTable USPASTable) Outcome {
 	n := len(asPath)
+  log.Infof("AS_PATH length N: %v", len(asPath))
 
 	// 1. If the AS_PATH is empty
 	if n == 0 {
+    log.Warnf("AS_PATH is empty")
 		return Invalid
 	}
 
 	// 2. If the receiving AS is not an RS-client and the most recently added AS does not match the neighbor AS
 	if !isRSClient && asPath[n-1] != neighborAS {
+    log.Warnf("Most recently added AS does not match the neighbor AS")
 		return Invalid
 	}
 
 	// 3. If the AS_PATH has an AS_SET
 	if HasASSet(asPath) {
+    log.Warnf("AS_PATH has an AS_SET")
 		return Invalid
 	}
 
 	// Calculate ramp lengths
 	maxUpRamp := CalculateMaxUpRamp(asPath, uspaspTable)
 	minUpRamp := CalculateMinUpRamp(asPath, uspaspTable)
+  log.Infof("Max up-ramp: %d, Min up-ramp: %d", maxUpRamp, minUpRamp)
 
 	// 4. If max_up_ramp < N
 	if maxUpRamp < n {
+    log.Warnf("Max up-ramp < N, AS_PATH is invalid")
 		return Invalid
 	}
 
 	// 5. If min_up_ramp < N
 	if minUpRamp < n {
+    log.Warnf("Min up-ramp < N, AS_PATH is unknown")
 		return Unknown
 	}
 
 	// 6. Else, the procedure halts with the outcome "Valid"
+  log.Infof("AS_PATH is valid")
 	return Valid
 }
 
@@ -267,16 +285,19 @@ func VerifyDownstreamPath(asPath []int, neighborAS int, uspaspTable USPASTable) 
 
 	// 1. If the AS_PATH is empty
 	if n == 0 {
+    log.Warnf("AS_PATH is empty")
 		return Invalid
 	}
 
 	// 2. If the most recently added AS does not match the neighbor AS
 	if asPath[n-1] != neighborAS {
+    log.Warnf("Most recently added AS does not match the neighbor AS")
 		return Invalid
 	}
 
 	// 3. If the AS_PATH has an AS_SET
 	if HasASSet(asPath) {
+    log.Warnf("AS_PATH has an AS_SET")
 		return Invalid
 	}
 
@@ -286,17 +307,22 @@ func VerifyDownstreamPath(asPath []int, neighborAS int, uspaspTable USPASTable) 
 	maxDownRamp := CalculateMaxDownRamp(asPath, uspaspTable)
 	minDownRamp := CalculateMinDownRamp(asPath, uspaspTable)
 
+  log.Infof("Max up-ramp: %d, Min up-ramp: %d, Max down-ramp: %d, Min down-ramp: %d", maxUpRamp, minUpRamp, maxDownRamp, minDownRamp)
+
 	// 4. If max_up_ramp + max_down_ramp < N
 	if maxUpRamp+maxDownRamp < n {
+    log.Warnf("Max up-ramp + max down-ramp < N")
 		return Invalid
 	}
 
 	// 5. If min_up_ramp + min_down_ramp < N
 	if minUpRamp+minDownRamp < n {
+    log.Warnf("Min up-ramp + min down-ramp < N")
 		return Unknown
 	}
 
 	// 6. Else, the procedure halts with the outcome "Valid"
+  log.Infof("AS_PATH is valid")
 	return Valid
 }
 

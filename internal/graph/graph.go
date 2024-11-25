@@ -9,6 +9,7 @@ import (
 	// Internal packages
 	"rstk/internal/parser"
   "rstk/internal/router"
+  "rstk/internal/rpki"
 
 	// Base data structure for topology, and node strucutres
 	// relations, edge, vertex representation are all based on
@@ -60,6 +61,10 @@ type Topology struct {
   // Topology type is used for determining policy assignment strategies to routers, depending
   // on provided argument, different number of policies are assigned to routers
   TopologyType string
+
+  // RPKI instance for the topology, it is used for storing the ASPA objects, and other
+  // related RPKI objects, for the routers in the topology
+  RPKI *rpki.RPKI
 }
 
 
@@ -80,11 +85,15 @@ type Topology struct {
 func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.Router], 
   map[int]*router.Router) {
 
+  // Initialize RPKI
+  rpki := rpki.NewRPKI()
+  t.RPKI = rpki
+
   // TODO For now also hardcoding topology type to specific policy types, all the routers
   // will be set according to below topology type, types are based on the `policy_factory.go`
   // GetPolicy function, later on also this should be moved to elsewhere, and be more
   // configurable, or user should be able to define their own policies
-  t.TopologyType = "Default"
+  t.TopologyType = "DefaultPolicy"
   log.Infof("Initializing topology with %s topology type for all routers", t.TopologyType)
 
   // Initialize the policy factory with the default PolicyFactory
@@ -312,6 +321,13 @@ func (t *Topology) FindRoutesTo(target *router.Router) {
     route := routes.PopFront().(*router.Route)
     final := route.Path[len(route.Path)-1]
     log.Debugf("Processing route to AS%d via AS%d", route.Dest.ASNumber, final.ASNumber)
+
+    // TODO Before learning route, first fecth the RPKI from topology and assign it
+    // to router field, after this process everything on the RPKI is handled
+    // over the router with it's current state, however this is kind of inefficient
+    // two different state of RPKI is formed one on router and another on topology
+    final.ASPA = t.RPKI.ASPA
+
     for _, neighbor := range final.LearnRoute(route) {
       routes.PushBack(final.ForwardRoute(route, neighbor))
       log.Debugf("Forwarded route from AS%d to neighbor AS%d", final.ASNumber, neighbor.ASNumber)
@@ -422,7 +438,8 @@ func (t *Topology) CreateASPAObjectsRandomly(deploymentFraction float64) {
           log.Warnf("Router with AS%v not found", asID)
           continue
         }
-        r.NewASPAObject()
+        _, uspas := r.NewASPAObject()
+        t.RPKI.ASPA.USPAS[r.ASNumber] = uspas
     }
 }
 
