@@ -19,6 +19,15 @@ type ASPAPolicy struct {
   Router    *Router
 }
 
+// Helper function for reversing the AS_PATH as per the IETF draft definition of AS_PATH
+func (ap *ASPAPolicy) reverseASPath(asPath []int) []int {
+    reversed := make([]int, len(asPath))
+    for i, j := 0, len(asPath)-1; i < len(asPath); i, j = i+1, j-1 {
+        reversed[i] = asPath[j]
+    }
+    return reversed
+}
+
 func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
     log.Infof("Evaluating route with ASPA policy")
 
@@ -28,7 +37,12 @@ func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
     if len(asPath) == 0 {
         log.Warn("AS_PATH is empty")
         return false
-    }
+    } 
+    
+    // Reverse the AS_PATH to match the IETF definition, since my AS_PATH concepts is kind of
+    // reversed such as at [5 3 1 12 15 6], 5 is the destination and 6 is the source, so reversing
+    // makes it [6 15 12 1 3 5], now 6 is the source and 5 is the destination 
+    asPath = ap.reverseASPath(asPath)
 
     // Compress the AS_PATH to remove duplicates
     // TODO not sure about the validty of this method of compressing AS path into
@@ -37,7 +51,7 @@ func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
     log.Infof("Compressed AS_PATH: %v", compressedPath)
 
 
-    neighborAS := compressedPath[len(compressedPath)-2]
+    neighborAS := compressedPath[1]
     log.Infof("Neighbor AS: %d", neighborAS)
 
     // Find the neighbor in the slice that matches the neighborAS
@@ -83,20 +97,20 @@ func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
     USPAS := ap.Router.ASPA.USPAS
 
     log.Infof("S-USPAS validation %v", USPAS)
+    log.Infof("AS%d from which the route is received, and destination route AS%d", ap.Router.ASNumber, 
+                                                                      compressedPath[len(compressedPath)-1])
     switch neighborRelation {
     case Customer, Peer:
         // Use the upstream verification algorithm
         // asPath []int, neighborAS int, isRSClient bool, uspaspTable USPASTable
         log.Infof("Evaluating under customer or peer relation")
         log.Infof("AS%d verifying route to AS%d: ASPA validation", ap.Router.ASNumber, route.Dest.ASNumber)
-        // outcome = protocols.VerifyUpstreamPath(compressedPath, neighborAS, true, USPAS)
-        outcome = protocols.VerifyDownstreamPath(compressedPath, neighborAS, USPAS)        
+        outcome, _ = protocols.UpstreamVerifyASPath(ap.Router.ASNumber, compressedPath, USPAS)        
     case Provider:
         // Use the downstream verification algorithm
         log.Infof("Evaluating under provider relation")
         log.Infof("AS%d verifying route to AS%d: ASPA validation", ap.Router.ASNumber, route.Dest.ASNumber)
-        // outcome = protocols.VerifyDownstreamPath(compressedPath, neighborAS, USPAS)
-        outcome = protocols.VerifyUpstreamPath(compressedPath, neighborAS, true, USPAS)
+        outcome, _ = protocols.DownstreamVerifyASPath(ap.Router.ASNumber, compressedPath, USPAS)
   
     default:
         // If relation is unknown or complex, treat as Invalid

@@ -3,6 +3,8 @@ package protocols
 import (
   log "github.com/sirupsen/logrus"
   "rstk/internal/common"
+  "fmt"
+  "errors"
 )
 
 // This file contains the implementation of the ASPA protocol, as described in the IETF draft
@@ -148,13 +150,13 @@ func ProviderAuthorization(x, y int, uspasTable USPASTable) (Relation, error) {
 
 	// Check if AS y is an attested provider of AS x, out of the U-SPAS table
   // that is in the structure of map[int]map[int]void
-  if _, exists := uspasTable[x][y]; exists {
-    log.Infof("AS %d is an attested provider of AS %d", y, x)
+  if _, exists := uspasTable[y][x]; exists {
+    log.Infof("AS%d is an attested provider of AS%d", x, y)
     return Provider, nil
   }
 
 	// Default case: Not Provider+
-  log.Infof("AS %d is not an attested provider of AS %d", y, x)
+  log.Infof("AS%d is not an attested provider of AS%d", x, y)
 	return NonProvider, nil
 }
 
@@ -169,53 +171,95 @@ func ProviderAuthorization(x, y int, uspasTable USPASTable) (Relation, error) {
 //   information to confirm the AS_PATH, so the result is Unknown.
 
 // CalculateMaxUpRamp calculates the maximum up-ramp length.
-func CalculateMaxUpRamp(asPath []int, uspaspTable USPASTable) int {
-	n := len(asPath)
-	for i := 0; i < n-1; i++ {
-    log.Infof("Calculating up-ramp for AS x:%d to AS y:%d on U-SPAS table %d", asPath[i], asPath[i+1], uspaspTable)
-		authResult, _ := ProviderAuthorization(asPath[i], asPath[i+1], uspaspTable)
-		if authResult == NonProvider {
-			return i
-		}
-	}
-	return n - 1
+func calculateUpRamp(asPath []int, uspasTable USPASTable) (maxUpRamp int, minUpRamp int) {
+    N := len(asPath)
+    maxUpRamp = N
+    minUpRamp = N
+    
+    log.Infof("Calculating max up-ramp")
+    // Calculate max_up_ramp
+    for i := 0; i < N-1; i++ {
+        x := asPath[i]
+        y := asPath[i+1]
+        // relation, err := r.ASPA.Authorize(x, y)
+        relation, err := ProviderAuthorization(x, y, uspasTable)
+        if err != nil {
+            // Handle error appropriately
+            fmt.Printf("Authorization error: %v\n", err)
+            break
+        }
+        if relation != Provider {
+            maxUpRamp = i
+            break
+        }
+    }
+
+    log.Infof("Calculating min up-ramp")
+    // Calculate min_up_ramp
+    for i := 0; i < N-1; i++ {
+        x := asPath[i]
+        y := asPath[i+1]
+        // relation, err := r.ASPA.Authorize(x, y)
+        relation, err := ProviderAuthorization(x, y, uspasTable)
+        if err != nil {
+            // Handle error appropriately
+            fmt.Printf("Authorization error: %v\n", err)
+            break
+        }
+        if relation == NoAttestation || relation != Provider {
+            minUpRamp = i
+            break
+        }
+    }
+
+    return
 }
 
-// CalculateMinUpRamp calculates the minimum up-ramp length.
-func CalculateMinUpRamp(asPath []int, uspaspTable USPASTable) int {
-	n := len(asPath)
-	for i := 0; i < n-1; i++ {
-		authResult, _ := ProviderAuthorization(asPath[i], asPath[i+1], uspaspTable)
-		if authResult == NonProvider || authResult == NoAttestation {
-			return i
-		}
-	}
-	return n - 1
+// calculateDownRamp calculates max_down_ramp and min_down_ramp based on the AS_PATH.
+func calculateDownRamp(asPath []int, uspasTable USPASTable) (maxDownRamp int, minDownRamp int) {
+    N := len(asPath)
+    maxDownRamp = N
+    minDownRamp = N
+    
+    log.Infof("Calculating max down-ramp")
+    // Calculate max_down_ramp
+    for i := N - 1; i > 0; i-- {
+        x := asPath[i]
+        y := asPath[i-1]
+        // relation, err := r.ASPA.Authorize(x, y)
+        relation, err := ProviderAuthorization(x, y, uspasTable)
+        if err != nil {
+            // Handle error appropriately
+            fmt.Printf("Authorization error: %v\n", err)
+            break
+        }
+        if relation != Provider {
+            maxDownRamp = N - i
+            break
+        }
+    }
+    
+    log.Infof("Calculating min down-ramp")
+    // Calculate min_down_ramp
+    for i := N - 1; i > 0; i-- {
+        x := asPath[i]
+        y := asPath[i-1]
+        // relation, err := r.ASPA.Authorize(x, y)
+        relation, err := ProviderAuthorization(x, y, uspasTable)
+        if err != nil {
+            // Handle error appropriately
+            fmt.Printf("Authorization error: %v\n", err)
+            break
+        }
+        if relation == NoAttestation || relation != Provider {
+            minDownRamp = N - i
+            break
+        }
+    }
+
+    return
 }
 
-// CalculateMaxDownRamp calculates the maximum down-ramp length.
-func CalculateMaxDownRamp(asPath []int, uspaspTable USPASTable) int {
-	n := len(asPath)
-	for j := n - 1; j > 0; j-- {
-		authResult, _ := ProviderAuthorization(asPath[j], asPath[j-1], uspaspTable)
-		if authResult == NonProvider {
-			return n - j + 1
-		}
-	}
-	return n 
-}
-
-// CalculateMinDownRamp calculates the minimum down-ramp length.
-func CalculateMinDownRamp(asPath []int, uspaspTable USPASTable) int {
-	n := len(asPath)
-	for j := n - 1; j > 0; j-- {
-		authResult, _ := ProviderAuthorization(asPath[j], asPath[j-1], uspaspTable)
-		if authResult == NonProvider || authResult == NoAttestation {
-			return n - j + 1
-		}
-	}
-	return n
-}
 
 // This function compresses the AS path to remove duplicates or sequences that don't affect validation.
 func CompressASPath(asPath []int) []int {
@@ -228,106 +272,88 @@ func CompressASPath(asPath []int) []int {
     return compressed
 }
 
-// The upstream verification algorithm described here is applied when a route is received from a
-// Customer or Peer, or is received by an RS from an RS-client, or is received by an RS-client 
-// from an RS.  In all these cases, the receiving/validating eBGP router expects the AS_PATH 
-// to have only an up-ramp (no down-ramp) for it to be Valid. Therefore, max_down_ramp and 
-// min_down_ramp are set to 0.
-func VerifyUpstreamPath(asPath []int, neighborAS int, isRSClient bool, uspaspTable USPASTable) Outcome {
-	n := len(asPath)
-  log.Infof("AS_PATH length N: %v", len(asPath))
+// VerifyUpstreamPath(asPath []int, neighborAS int, isRSClient bool, uspaspTable USPASTable) Outcome 
+// UpstreamVerifyASPath applies the upstream verification algorithm.
+func UpstreamVerifyASPath(originRoute int, asPath []int, uspasTable USPASTable) (Outcome, error) {
+    if len(asPath) == 0 {
+        return Invalid, errors.New("AS_PATH is empty")
+    }
 
-	// 1. If the AS_PATH is empty
-	if n == 0 {
-    log.Warnf("AS_PATH is empty")
-		return Invalid
-	}
+    // asPath := route.PathASNumbers()
+    N := len(asPath)
 
-	// 2. If the receiving AS is not an RS-client and the most recently added AS does not match the neighbor AS
-	if !isRSClient && asPath[n-1] != neighborAS {
-    log.Warnf("Most recently added AS does not match the neighbor AS")
-		return Invalid
-	}
+    // Step 2: Check if the most recently added AS matches the neighbor AS
+    // The most recently added AS is the last AS in the path
+    neighborAS := asPath[0]
+    if neighborAS != originRoute {
+        log.Infof("Most recently added AS %d does not match receiving AS %d", neighborAS, originRoute)
+        return Invalid, fmt.Errorf("Most recently added AS %d does not match receiving AS %d", neighborAS, originRoute)
+    }
 
-	// 3. If the AS_PATH has an AS_SET
-	if HasASSet(asPath) {
-    log.Warnf("AS_PATH has an AS_SET")
-		return Invalid
-	}
+    // Step 3: Check for AS_SET in AS_PATH
+    // Assuming AS_SET is represented differently, e.g., as a list or with special markers.
+    // If AS_SET is present, halt with Invalid.
+    // For simplicity, assuming AS_SET is not represented, so skipping this step.
+    // Implement AS_SET detection as per your AS_PATH representation.
 
-	// Calculate ramp lengths
-	maxUpRamp := CalculateMaxUpRamp(asPath, uspaspTable)
-	minUpRamp := CalculateMinUpRamp(asPath, uspaspTable)
-  log.Infof("Max up-ramp: %d, Min up-ramp: %d", maxUpRamp, minUpRamp)
+    // Step 4 and 5: Use ramp calculations
+    maxUpRamp, minUpRamp := calculateUpRamp(asPath, uspasTable)
 
-	// 4. If max_up_ramp < N
-	if maxUpRamp < n {
-    log.Warnf("Max up-ramp < N, AS_PATH is invalid")
-		return Invalid
-	}
+    if maxUpRamp < N {
+        log.Infof("Max up-ramp %d is less than N %d", maxUpRamp, N)
+        return Invalid, nil
+    }
 
-	// 5. If min_up_ramp < N
-	if minUpRamp < n {
-    log.Warnf("Min up-ramp < N, AS_PATH is unknown")
-		return Unknown
-	}
+    if minUpRamp < N {
+        log.Infof("Min up-ramp %d is less than N %d", minUpRamp, N)
+        return Unknown, nil
+    }
 
-	// 6. Else, the procedure halts with the outcome "Valid"
-  log.Infof("AS_PATH is valid")
-	return Valid
+    log.Infof("ASPA validation successful, max up-ramp (%d) and min up-ramp (%d) is >= N (%d)", maxUpRamp, minUpRamp, N)
+    return Valid, nil
 }
 
-// The downstream verification algorithm described here is applied when a route is received from a
-// provider. Both up-ramp and down-ramp are calculated. The sum of the maximum and minimum lengths 
-// of the up-ramp and down-ramp is checked against the AS_PATH length
-func VerifyDownstreamPath(asPath []int, neighborAS int, uspaspTable USPASTable) Outcome {
-	n := len(asPath)
+// DownstreamVerifyASPath applies the downstream verification algorithm.
+func DownstreamVerifyASPath(originRoute int, asPath []int, uspasTable USPASTable) (Outcome, error) {
+    if len(asPath) == 0 {
+        return Invalid, errors.New("AS_PATH is empty")
+    }
 
-	// 1. If the AS_PATH is empty
-	if n == 0 {
-    log.Warnf("AS_PATH is empty")
-		return Invalid
-	}
+    // asPath := route.PathASNumbers()
+    N := len(asPath)
 
-	// 2. If the most recently added AS does not match the neighbor AS
-	if asPath[n-1] != neighborAS {
-    log.Warnf("Most recently added AS does not match the neighbor AS")
-		return Invalid
-	}
+    // Step 2: Check if the most recently added AS matches the neighbor AS
+    // since the asPath is reversed instead of taking asPath[len(asPath)-1] we take asPath[0]
+    neighborAS := asPath[0]
 
-	// 3. If the AS_PATH has an AS_SET
-	if HasASSet(asPath) {
-    log.Warnf("AS_PATH has an AS_SET")
-		return Invalid
-	}
+    if neighborAS != originRoute {
+        log.Infof("Most recently added AS %d does not match receiving AS %d", neighborAS, originRoute)
+        return Invalid, fmt.Errorf("Most recently added AS %d does not match receiving AS %d", neighborAS, originRoute)
+    }
 
-	// Calculate ramp lengths
-	maxUpRamp := CalculateMaxUpRamp(asPath, uspaspTable)
-	minUpRamp := CalculateMinUpRamp(asPath, uspaspTable)
-	maxDownRamp := CalculateMaxDownRamp(asPath, uspaspTable)
-	minDownRamp := CalculateMinDownRamp(asPath, uspaspTable)
+    // Step 3: Check for AS_SET in AS_PATH
+    // Assuming AS_SET is represented differently, e.g., as a list or with special markers.
+    // If AS_SET is present, halt with Invalid.
+    // For simplicity, assuming AS_SET is not represented, so skipping this step.
+    // Implement AS_SET detection as per your AS_PATH representation.
 
-  log.Infof("Max up-ramp: %d, Min up-ramp: %d, Max down-ramp: %d, Min down-ramp: %d", maxUpRamp, minUpRamp, maxDownRamp, minDownRamp)
+    // Step 4 and 5: Use ramp calculations
+    maxUpRamp, minUpRamp := calculateUpRamp(asPath, uspasTable)
+    maxDownRamp, minDownRamp := calculateDownRamp(asPath, uspasTable)
 
-	// 4. If max_up_ramp + max_down_ramp < N
-	if maxUpRamp+maxDownRamp < n {
-    log.Warnf("Max up-ramp + max down-ramp < N")
-		return Invalid
-	}
+    if (maxUpRamp + maxDownRamp) < N {
+        log.Infof("Max up-ramp %d and max down-ramp %d is less than N %d", maxUpRamp, maxDownRamp, N)
+        return Invalid, nil
+    }
 
-	// 5. If min_up_ramp + min_down_ramp < N
-	if minUpRamp+minDownRamp < n {
-    log.Warnf("Min up-ramp + min down-ramp < N")
-		return Unknown
-	}
-
-	// 6. Else, the procedure halts with the outcome "Valid"
-  log.Infof("AS_PATH is valid")
-	return Valid
-}
-
-func HasASSet(asPath []int) bool {
-	// Stub function: Replace with logic to detect AS_SET in the AS_PATH.
-	// This can involve checking specific encodings or markers that denote AS_SETs in the path.
-	return false 
+    if (minUpRamp + minDownRamp) < N {
+        log.Infof("Min up-ramp %d and min down-ramp %d is less than N %d", minUpRamp, minDownRamp, N)
+        return Unknown, nil
+    }
+    
+    log.Infof("ASPA validation successful, max up-ramp + max down-ramp (%d), and min up-ramp + min down-ramp (%d) is >= N (%d)", 
+                maxUpRamp + maxDownRamp, 
+                minUpRamp + minDownRamp, 
+                N)
+    return Valid, nil
 }

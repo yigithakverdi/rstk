@@ -93,7 +93,7 @@ func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.
   // will be set according to below topology type, types are based on the `policy_factory.go`
   // GetPolicy function, later on also this should be moved to elsewhere, and be more
   // configurable, or user should be able to define their own policies
-  t.TopologyType = "DefaultPolicy"
+  t.TopologyType = "ASPA"
   log.Infof("Initializing topology with %s topology type for all routers", t.TopologyType)
 
   // Initialize the policy factory with the default PolicyFactory
