@@ -25,3 +25,7 @@ func NewRPKI() *RPKI {
     },
   }
 }
+
+func (rpki *RPKI) ResetUSPASRecord(asID int) {
+  rpki.ASPA.USPAS[asID] = make(map[int]void)
+}

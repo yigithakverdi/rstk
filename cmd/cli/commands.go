@@ -52,8 +52,7 @@ func (s *State) CCreateASPAObject(args []string) {
 
   // Creating ASPA object for the router
   fmt.Println("[+] Creating ASPA object for the router...")
-  _, uspas := r.NewASPAObject()
-  fmt.Println(uspas)
+  r.NewASPAObject()
 }
 
 func (s *State) CCheckRouterASPACompliance(args []string) {
@@ -123,7 +122,22 @@ func (s *State) CGenerateASPAObject(args []string) {
 // Command that initializes the topology with the given AS relationships
 func (s *State) CInit(args []string) {
   t := graph.Topology{}
-  
+  t.TopologyType = "Default"
+  // Two type of topology initialization, one is with ASPA and the other one is with
+  // default policy, default argument is default policy so arguments should be checked
+  // accordingly
+  if len(args) == 1 {
+    if(args[0] == "ASPA") {
+      t.TopologyType = "ASPA"
+    } else if(args[0] == "Default") {
+      t.TopologyType = "Default"
+    } else {
+      fmt.Println("[!] Usage: init-topology <ASPA|Default>")
+      return
+    }
+  }
+  fmt.Println("[+] Topology type:", t.TopologyType)
+ 
   // Since Init() function requires AS relationships, we need to parse the
   // related data source, so every time this command is called, I/O operation
   // will be done, need to inform user on this
@@ -133,7 +147,7 @@ func (s *State) CInit(args []string) {
   // left to the user, or a default path should be provided, informing the user
   // on this as  well
   fmt.Println("[?] Path is hardcoded, please change the path in the code")
-  path := "/home/yigit/workspace/github/rstk-worktree/rstk-fix/data/test-2/test.as-rel2.txt"
+  path := "/home/yigit/workspace/github/rstk-worktree/rstk-fix/data/test-2/test.as-rel1.txt"
   
   asRelsList, err := parser.GetAsRelationships(path)
   if err != nil {
@@ -354,6 +368,8 @@ func (s *State) CHijack(args []string) {
 
   // Hijacking the route
   fmt.Println("[+] Hijacking route...")
+  // t.Hijack(router1, router2, numHops)
+  // func (t *Topology) Hijack(victim *router.Router, attacker *router.Router, n int) {
   t.Hijack(router1, router2, numHops)
 }
 

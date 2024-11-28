@@ -2,6 +2,8 @@ package router
 
 import (
   "fmt"
+
+  log "github.com/sirupsen/logrus"
 )
 
 // Ensure DefaultPolicy implements the Policy interface
@@ -19,6 +21,7 @@ type DefaultPolicy struct {}
 
 // Method for accepting route, by default if the route does not contain cycle, it is accepted
 func (dp *DefaultPolicy) AcceptRoute(route *Route) bool {
+  log.Infof("Route contains cycle: %v", route.ContainsCycle())
   return !route.ContainsCycle()
 }
 

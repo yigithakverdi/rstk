@@ -148,6 +148,8 @@ func (r *Router) LearnRoute(route *Route) []*Router {
   //   log.Debugf("Route is not valid, since it contains cycle")
   //   return []*Router{}
   // }
+  isAccepted := r.Policy.AcceptRoute(route)
+  log.Infof("Will route be accepted: %v", isAccepted)
   if !r.Policy.AcceptRoute(route) {
     log.Debugf("Route is not valid according to policy %T", r.Policy)
     return []*Router{}
@@ -169,14 +171,17 @@ func (r *Router) LearnRoute(route *Route) []*Router {
   //    2. Route is not the same as the current router
   // Then we can add the route to the routing table of the current router instance
   r.RouteTable[route.Dest.ASNumber] = route
-  log.Infof("AS%d added route to AS%d via path %v", r.ASNumber, route.Dest.ASNumber, route.PathASNumbers())
+  log.Infof("AS%d added route to AS%d via path %v", r.ASNumber, route.Dest.ASNumber, 
+                                                              route.PathASNumbers())
   log.Infof("Router state after adding route:\n%s", r.ToString())
 
   // Deciding which neighbor should receive the propagation of current route recieved
   // to the first hop, if not then it is not forwarded
   forwardToRelations := make(map[Relation]bool)
   allRelations := []Relation{Customer, Peer, Provider}
+  
   for _, relation := range allRelations {
+
     if r.Policy.ForwardTo(route, relation) {
       forwardToRelations[relation] = true
     }
@@ -255,13 +260,30 @@ func (r *Router) OriginateRoute(nextHop *Router) *Route {
 }
 
 // ForwardRoute forwards an existing route to the nextHop.
-func (r *Router) ForwardRoute(route *Route, nextHop *Router) *Route {    
+// func (r *Router) ForwardRoute(route *Route, nextHop *Router) *Route {    
+//     return &Route{
+//         Dest:            route.Dest, 
+//         Path:            append(route.Path, nextHop),
+//         OriginInvalid:   false, 
+//         PathEndInvalid:  false,
+//         Authenticated:   true,
+//     }
+// }
+
+func (r *Router) ForwardRoute(route *Route, nextHop *Router) *Route {
+    // Make a copy of route.Path to avoid modifying the original slice
+    newPath := make([]*Router, len(route.Path))
+    copy(newPath, route.Path)
+
+    // Append nextHop to the new path
+    newPath = append(newPath, nextHop)
+
     return &Route{
-        Dest:            route.Dest, 
-        Path:            append(route.Path, nextHop),
-        OriginInvalid:   false, 
-        PathEndInvalid:  false,
-        Authenticated:   true,
+        Dest:            route.Dest,
+        Path:            newPath,
+        OriginInvalid:   route.OriginInvalid,
+        PathEndInvalid:  route.PathEndInvalid,
+        Authenticated:   route.Authenticated,
     }
 }
 
@@ -288,7 +310,6 @@ func (r *Router) NewASPAObject() (protocols.ASPAObject, map[int]void) {
     asNumbers := make([]int, 0, len(providers))
     for _, provider := range providers {
       asNumbers = append(asNumbers, provider.Router.ASNumber)
-      fmt.Println(asNumbers)
     }
     aspa := protocols.ASPAObject{
       CustomerAS: r.ASNumber,

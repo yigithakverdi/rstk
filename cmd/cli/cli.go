@@ -107,7 +107,7 @@ func Run(args []string) {
 
 	// Enable multi-line editing and history support
 	line.SetCtrlCAborts(true)
-	historyFile := ".cli_history"
+	historyFile := "logs/.cli_history"
 
 	// Load command history if exists
 	if f, err := os.Open(historyFile); err == nil {

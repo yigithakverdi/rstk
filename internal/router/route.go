@@ -7,6 +7,7 @@ import (
   // Internal libraries
 
   // Github packages
+  log "github.com/sirupsen/logrus"
 )
 
 // Route struct is used for storing routing information, such as the path, path length,
@@ -22,13 +23,15 @@ type Route struct {
 // Method for returning humand readable string representation of a route
 func (r *Route) ToString() string {
     asNumbers := r.PathASNumbers()
-    return fmt.Sprintf("Dest AS%d via path %v", r.Dest.ASNumber, asNumbers)
+    // return fmt.Sprintf("Dest AS%d via path %v", r.Dest.ASNumber, asNumbers)
+    return fmt.Sprintf("%v", asNumbers)
 }
 
 // Method for checking if the route containcycles or not, depending on the
 // result of the check, route might be discarded or accepted to be recorded into
 // routing table of the router
 func (r* Route) ContainsCycle() bool {
+  log.Infof("Checking for cycles in route %v", r.ToString())
   path := r.Path
   visited := make(map[int]bool)
   for _, router := range path {

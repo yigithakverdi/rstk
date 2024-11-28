@@ -125,11 +125,12 @@ func GetUnionSPAS(aspaList []ASPAObject) map[int]void {
 // valid.  The provider authorization function is used in the ASPA-based
 // AS_PATH verification algorithms described in Section 7.2 and
 // Section 7.3.
-func ProviderAuthorization(x, y int, uspasTable USPASTable) (Relation, error) {
+func ProviderAuthorization(customerAS, providerAS int, uspasTable USPASTable) (Relation, error) {
 	// Check if the customer AS (CAS) exists in the U-SPAS table
-	_, exists := uspasTable[x]
+  log.Infof("Current received CAS is AS%d and PAS is AS%d", customerAS, providerAS)
+	_, exists := uspasTable[customerAS]
 	if !exists {
-    log.Warnf("No attestation for CAS %d", x)
+    log.Warnf("No attestation for CAS %d", customerAS)
 		return NoAttestation, nil
 	}
 
@@ -150,13 +151,13 @@ func ProviderAuthorization(x, y int, uspasTable USPASTable) (Relation, error) {
 
 	// Check if AS y is an attested provider of AS x, out of the U-SPAS table
   // that is in the structure of map[int]map[int]void
-  if _, exists := uspasTable[y][x]; exists {
-    log.Infof("AS%d is an attested provider of AS%d", x, y)
+  if _, exists := uspasTable[customerAS][providerAS]; exists {
+    log.Infof("AS%d is an attested provider of AS%d", providerAS, customerAS)
     return Provider, nil
   }
 
 	// Default case: Not Provider+
-  log.Infof("AS%d is not an attested provider of AS%d", x, y)
+  log.Infof("AS%d is not an attested provider of AS%d", providerAS, customerAS)
 	return NonProvider, nil
 }
 
@@ -179,10 +180,12 @@ func calculateUpRamp(asPath []int, uspasTable USPASTable) (maxUpRamp int, minUpR
     log.Infof("Calculating max up-ramp")
     // Calculate max_up_ramp
     for i := 0; i < N-1; i++ {
-        x := asPath[i]
-        y := asPath[i+1]
+        providerAS := asPath[i]
+        customerAS := asPath[i+1]
+        log.Infof("Current <CAS, PAS> pair: <%d, %d>", customerAS, providerAS)
+
         // relation, err := r.ASPA.Authorize(x, y)
-        relation, err := ProviderAuthorization(x, y, uspasTable)
+        relation, err := ProviderAuthorization(customerAS, providerAS, uspasTable)
         if err != nil {
             // Handle error appropriately
             fmt.Printf("Authorization error: %v\n", err)
@@ -197,10 +200,12 @@ func calculateUpRamp(asPath []int, uspasTable USPASTable) (maxUpRamp int, minUpR
     log.Infof("Calculating min up-ramp")
     // Calculate min_up_ramp
     for i := 0; i < N-1; i++ {
-        x := asPath[i]
-        y := asPath[i+1]
+        providerAS := asPath[i]
+        customerAS := asPath[i+1]
+        log.Infof("Current <CAS, PAS> pair: <%d, %d>", customerAS, providerAS)
+    
         // relation, err := r.ASPA.Authorize(x, y)
-        relation, err := ProviderAuthorization(x, y, uspasTable)
+        relation, err := ProviderAuthorization(customerAS, providerAS, uspasTable)
         if err != nil {
             // Handle error appropriately
             fmt.Printf("Authorization error: %v\n", err)
@@ -211,7 +216,6 @@ func calculateUpRamp(asPath []int, uspasTable USPASTable) (maxUpRamp int, minUpR
             break
         }
     }
-
     return
 }
 
@@ -224,10 +228,12 @@ func calculateDownRamp(asPath []int, uspasTable USPASTable) (maxDownRamp int, mi
     log.Infof("Calculating max down-ramp")
     // Calculate max_down_ramp
     for i := N - 1; i > 0; i-- {
-        x := asPath[i]
-        y := asPath[i-1]
+        providerAS := asPath[i]
+        customerAS := asPath[i-1]
+        log.Infof("Current <CAS, PAS> pair: <%d, %d>", customerAS, providerAS)
+            
         // relation, err := r.ASPA.Authorize(x, y)
-        relation, err := ProviderAuthorization(x, y, uspasTable)
+        relation, err := ProviderAuthorization(customerAS, providerAS, uspasTable)
         if err != nil {
             // Handle error appropriately
             fmt.Printf("Authorization error: %v\n", err)
@@ -242,10 +248,13 @@ func calculateDownRamp(asPath []int, uspasTable USPASTable) (maxDownRamp int, mi
     log.Infof("Calculating min down-ramp")
     // Calculate min_down_ramp
     for i := N - 1; i > 0; i-- {
-        x := asPath[i]
-        y := asPath[i-1]
+        providerAS := asPath[i]
+        customerAS := asPath[i-1]
+        log.Infof("Current <CAS, PAS> pair: <%d, %d>", customerAS, providerAS)
+    
         // relation, err := r.ASPA.Authorize(x, y)
-        relation, err := ProviderAuthorization(x, y, uspasTable)
+        relation, err := ProviderAuthorization(customerAS, providerAS, uspasTable)    
+
         if err != nil {
             // Handle error appropriately
             fmt.Printf("Authorization error: %v\n", err)
@@ -282,6 +291,9 @@ func UpstreamVerifyASPath(originRoute int, asPath []int, uspasTable USPASTable) 
     // asPath := route.PathASNumbers()
     N := len(asPath)
 
+    // Received AS path on up-stream calculaton
+    log.Infof("Received AS path %v (US)", asPath)
+
     // Step 2: Check if the most recently added AS matches the neighbor AS
     // The most recently added AS is the last AS in the path
     neighborAS := asPath[0]
@@ -297,6 +309,7 @@ func UpstreamVerifyASPath(originRoute int, asPath []int, uspasTable USPASTable) 
     // Implement AS_SET detection as per your AS_PATH representation.
 
     // Step 4 and 5: Use ramp calculations
+    log.Infof("Calculating up-ramp for AS path %v", asPath)
     maxUpRamp, minUpRamp := calculateUpRamp(asPath, uspasTable)
 
     if maxUpRamp < N {
@@ -322,6 +335,9 @@ func DownstreamVerifyASPath(originRoute int, asPath []int, uspasTable USPASTable
     // asPath := route.PathASNumbers()
     N := len(asPath)
 
+    // Received AS path on down-stream calculaton
+    log.Infof("Received AS path %v (DS)", asPath)
+
     // Step 2: Check if the most recently added AS matches the neighbor AS
     // since the asPath is reversed instead of taking asPath[len(asPath)-1] we take asPath[0]
     neighborAS := asPath[0]
@@ -338,6 +354,7 @@ func DownstreamVerifyASPath(originRoute int, asPath []int, uspasTable USPASTable
     // Implement AS_SET detection as per your AS_PATH representation.
 
     // Step 4 and 5: Use ramp calculations
+    log.Infof("Calculating down-ramp for AS path %v", asPath)
     maxUpRamp, minUpRamp := calculateUpRamp(asPath, uspasTable)
     maxDownRamp, minDownRamp := calculateDownRamp(asPath, uspasTable)
 
@@ -357,3 +374,4 @@ func DownstreamVerifyASPath(originRoute int, asPath []int, uspasTable USPASTable
                 N)
     return Valid, nil
 }
+

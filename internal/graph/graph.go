@@ -3,13 +3,14 @@ package graph
 import (
 	// Core imports
 	"fmt"
-  "math/rand"
-  "math"
+	"math"
+	"math/rand"
+	"strings"
 
 	// Internal packages
 	"rstk/internal/parser"
-  "rstk/internal/router"
-  "rstk/internal/rpki"
+	"rstk/internal/router"
+	"rstk/internal/rpki"
 
 	// Base data structure for topology, and node strucutres
 	// relations, edge, vertex representation are all based on
@@ -24,7 +25,7 @@ import (
 
 	// TODO again I might build more specfic data structure for networking context
 	"github.com/edwingeng/deque"
-  log "github.com/sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 )
 
 // TODO note for temporarly, I am hardcoding the topology with network context, in normal
@@ -93,7 +94,6 @@ func (t* Topology) Init(asRelsList []parser.AsRel) (graph.Graph[string, *router.
   // will be set according to below topology type, types are based on the `policy_factory.go`
   // GetPolicy function, later on also this should be moved to elsewhere, and be more
   // configurable, or user should be able to define their own policies
-  t.TopologyType = "ASPA"
   log.Infof("Initializing topology with %s topology type for all routers", t.TopologyType)
 
   // Initialize the policy factory with the default PolicyFactory
@@ -290,7 +290,10 @@ func (t *Topology) AddRouter(r *router.Router) {
 // Main routing related function for finding routes to a specific destination, it is 
 // the one of the core functions within the routing logic of the simulator
 func (t *Topology) FindRoutesTo(target *router.Router) {
-  log.Infof("Starting route propagation to target AS%d", target.ASNumber)
+  log.Infof("Starting route propagation to tar get AS%d", target.ASNumber)
+
+  // Holds all the routes that are processed
+  processedRoutes := []*router.Route{}
 
   // Initializing the queue for finding routes to the target
   routes := deque.NewDeque()
@@ -305,6 +308,7 @@ func (t *Topology) FindRoutesTo(target *router.Router) {
     Authenticated: true,
   }
   target.ForceRoute(route)
+  
   log.Debugf("Forcing route to target AS%d", target.ASNumber)
 
   // Step 1: Add neighbors of the target router to the queue
@@ -318,7 +322,12 @@ func (t *Topology) FindRoutesTo(target *router.Router) {
   // Step 3: Loop in while until all the possible routes are exhausted
   // such as no possible routes left according to policies
   for routes.Len() > 0 {
+
+    // fmt.Println("\nRoute queue length is: ", routes.Len())
+    printRouteQueue(routes)
     route := routes.PopFront().(*router.Route)
+    processedRoutes = append(processedRoutes, route)
+
     final := route.Path[len(route.Path)-1]
     log.Debugf("Processing route to AS%d via AS%d", route.Dest.ASNumber, final.ASNumber)
 
@@ -330,10 +339,17 @@ func (t *Topology) FindRoutesTo(target *router.Router) {
 
     for _, neighbor := range final.LearnRoute(route) {
       routes.PushBack(final.ForwardRoute(route, neighbor))
-      log.Debugf("Forwarded route from AS%d to neighbor AS%d", final.ASNumber, neighbor.ASNumber)
+      log.Debugf("Forwarded route from AS%d to neighbor AS%d", final.ASNumber,
+                                                               neighbor.ASNumber)
     }
   } 
   log.Infof("Completed route propagation to target AS%d", target.ASNumber)
+  var sb strings.Builder  
+  sb.WriteString("Processed routes: \n")
+  for _, route := range processedRoutes {
+    sb.WriteString(fmt.Sprintf("Route to AS%d: %v\n", route.Dest.ASNumber, route.PathASNumbers()))
+  }
+  log.Infof(sb.String())  
 }
 
 // Method for returning humand readable string representation of a topology 
@@ -432,7 +448,7 @@ func (t *Topology) CreateASPAObjectsRandomly(deploymentFraction float64) {
     // Create ASPA objects for selected ASes
     for i := 0; i < numASesToDeploy; i++ {
         asID := asIDs[shuffledASIDs[i]]
-        log.Infof("Creating ASPA object for AS%v", asID)
+        // log.Infof("Creating ASPA object for AS%v", asID)
         r := t.GetRouter(asID)
         if r == nil {
           log.Warnf("Router with AS%v not found", asID)
@@ -440,6 +456,7 @@ func (t *Topology) CreateASPAObjectsRandomly(deploymentFraction float64) {
         }
         _, uspas := r.NewASPAObject()
         t.RPKI.ASPA.USPAS[r.ASNumber] = uspas
+        t.GetRouter(asID).ASPA = t.RPKI.ASPA
     }
 }
 

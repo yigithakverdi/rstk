@@ -3,8 +3,6 @@ package router
 
 import (
   "fmt"
-  "strings"
-  "rstk/internal/protocols"
   log "github.com/sirupsen/logrus"
 )
 
@@ -19,112 +17,223 @@ type ASPAPolicy struct {
   Router    *Router
 }
 
-// Helper function for reversing the AS_PATH as per the IETF draft definition of AS_PATH
-func (ap *ASPAPolicy) reverseASPath(asPath []int) []int {
-    reversed := make([]int, len(asPath))
-    for i, j := 0, len(asPath)-1; i < len(asPath); i, j = i+1, j-1 {
-        reversed[i] = asPath[j]
-    }
-    return reversed
+
+// Helper function that builds route instance with it's AS path reversed
+func (r *Route) Reverse() *Route {
+  reversedPath := make([]*Router, 0)
+  for i := len(r.Path) - 1; i >= 0; i-- {
+    reversedPath = append(reversedPath, r.Path[i])
+  }
+  return &Route{
+    Dest: r.Dest,
+    Path: reversedPath,
+
+    Authenticated: r.Authenticated,
+    OriginInvalid: r.OriginInvalid,
+    PathEndInvalid: r.PathEndInvalid,
+  }
 }
+    
 
 func (ap *ASPAPolicy) AcceptRoute(route *Route) bool {
-    log.Infof("Evaluating route with ASPA policy")
+  result, err := ap.Router.PerformASPA(route)
+  
+  if err != nil {
+    fmt.Printf("Error: %s\n", err)
+    return false
+  }
+  fmt.Printf("ASPA Validation Result: %s\n", result)
+  
+  if !route.ContainsCycle() && result == ASPAInvalid {
+    return false
+  }
+  return true
+}
 
-    // Get the AS_PATH as a slice of AS numbers
-    asPath := route.PathASNumbers()
-
-    if len(asPath) == 0 {
-        log.Warn("AS_PATH is empty")
-        return false
-    } 
-    
-    // Reverse the AS_PATH to match the IETF definition, since my AS_PATH concepts is kind of
-    // reversed such as at [5 3 1 12 15 6], 5 is the destination and 6 is the source, so reversing
-    // makes it [6 15 12 1 3 5], now 6 is the source and 5 is the destination 
-    asPath = ap.reverseASPath(asPath)
-
-    // Compress the AS_PATH to remove duplicates
-    // TODO not sure about the validty of this method of compressing AS path into
-    // single union of ASes
-    compressedPath := protocols.CompressASPath(asPath)
-    log.Infof("Compressed AS_PATH: %v", compressedPath)
-
-
-    neighborAS := compressedPath[1]
-    log.Infof("Neighbor AS: %d", neighborAS)
-
-    // Find the neighbor in the slice that matches the neighborAS
-    // TODO here trying to find, the last AS in the compressed path in the neighbors list
-    // by looping over all the neighbors in the policy struct of the current router
-    // which is very inefficient (considering thousands of AS neighbors)
-    //
-    // Access neighbors from the router
-    var sb strings.Builder
-    neighbors := ap.Router.Neighbors
-    sb.WriteString(fmt.Sprintf("Neighbor: "))
-    for _, neighbor := range neighbors {
-      sb.WriteString(fmt.Sprintf("%d ", neighbor.Router.ASNumber))
+// Helper function for obtaining only unique AS numbers from the AS path, kind of a 
+// compressed AS path
+func (r *Route) compressASPATH() (uniqueASes []*Router) {
+  asSet := make(map[int]bool)
+  uniqueASes = make([]*Router, 0)
+  for _, asys := range r.Path {
+    asNum := asys.ASNumber
+    if !asSet[asNum] {
+        asSet[asNum] = true
+        uniqueASes = append(uniqueASes, asys)
     }
-    log.Infof(sb.String())
+  }
+  return uniqueASes
+} 
 
-    var neighbor *Neighbor
-    var exists bool
+func (r *Relation) ToString() string {
+  var relationString string
+  switch *r {
+    case Customer:
+      relationString = "Customer"
+    case Peer:
+      relationString = "Peer"
+    case Provider:
+      relationString = "Provider"
+    default:
+      relationString = "Unknown"
+  }
+  return relationString
+}
 
-    for i := range neighbors {
-        if neighbors[i].Router.ASNumber == neighborAS {
-            neighbor = &neighbors[i]
-            exists = true
-            break
+func (r *Router) PerformASPA(route *Route) (ASPAResult, error) {
+    // Reverse the AS path
+    route = route.Reverse()
+
+    log.Infof("Received route %v ASPA policy for current AS%d", route.PathASNumbers(), r.ASNumber)
+
+    if len(route.Path) < 2 {
+        log.Warnf("Route length below verifiable")
+        return ASPAInvalid, fmt.Errorf("Route length below verifiable")
+    }
+
+    neighborAS := route.Path[1]
+    relation := r.GetRelation(*neighborAS)
+    
+    log.Infof("AS%d is %v of AS%d", neighborAS.ASNumber, relation.ToString(), r.ASNumber)
+
+    uniqueASes := route.compressASPATH()
+    log.Infof("Unique ASes in the path: %v", uniqueASes)
+    N := len(uniqueASes)
+    log.Infof("Length of the path: %d", N)
+    if N < 2 {
+        log.Warnf("Route length below verifiable")
+        return ASPAInvalid, fmt.Errorf("Route length below verifiable")
+    }
+
+    var result ASPAResult
+
+    // Determine if we are in upstream or downstream verification
+    log.Infof("Length of unique AS path %d (N)", N)
+    for _, as := range uniqueASes {
+      log.Infof("AS: %d", as.ASNumber)
+    }
+    if relation == Customer || relation == Peer {
+        log.Infof("Evaluating under customer or peer relation with upstream path verification")
+        result = r.upstreamPathVerification(uniqueASes, N)
+    } else if relation == Provider {
+        log.Infof("Evaluating under provider relation with downstream path verification")
+        result = r.downstreamPathVerification(uniqueASes, N)
+    } else {
+        log.Warnf("Unknown or unsupported neighbor relation for AS%d", neighborAS.ASNumber)
+        return ASPAInvalid, fmt.Errorf("Unknown relationship type: %v", relation)
+    }
+    log.Infof("ASPA validation result: %v", result)
+    return result, nil
+}
+
+func (r *Router) upstreamPathVerification(uniqueASes []*Router, N int) ASPAResult {
+    log.Infof("Performing upstream path verification")
+    // Steps 1-3 are omitted as they are handled earlier
+    // Compute max_up_ramp and min_up_ramp
+    maxUpRamp, minUpRamp := r.computeUpRamp(uniqueASes, N)
+    log.Infof("Max up ramp: %d, Min up ramp: %d", maxUpRamp, minUpRamp)
+    if maxUpRamp < N {
+        log.Warnf("Max up ramp is less than N")
+        return ASPAInvalid
+    } else if minUpRamp < N {
+        log.Warnf("Min up ramp is less than N")
+        return ASPAUnknown
+    } else {
+        log.Infof("maxUpRamp(%d) >= N and minUpRamp(%d) >= N(%d)", maxUpRamp, minUpRamp, N)
+        log.Infof("ASPA validation successful")
+        return ASPAValid
+    }
+}
+
+func (r *Router) downstreamPathVerification(uniqueASes []*Router, N int) ASPAResult {
+    log.Infof("Performing downstream path verification")
+    // Steps 1-3 are omitted as they are handled earlier
+    // Compute max_up_ramp, min_up_ramp, max_down_ramp, min_down_ramp
+    maxUpRamp, minUpRamp := r.computeUpRamp(uniqueASes, N)
+    maxDownRamp, minDownRamp := r.computeDownRamp(uniqueASes, N)
+    log.Infof("Max up ramp: %d, Min up ramp: %d, Max down ramp: %d, Min down ramp: %d",
+                                        maxUpRamp, minUpRamp, maxDownRamp, minDownRamp)
+
+    if maxUpRamp+maxDownRamp < N {
+        log.Warnf("Max up ramp + max down ramp is less than N")
+        return ASPAInvalid
+    } else if minUpRamp+minDownRamp < N {
+        log.Warnf("Min up ramp + min down ramp is less than N")
+        return ASPAUnknown
+    } else {
+        log.Infof("maxUpRamp(%d) + maxDownRamp(%d) >= N and minUpRamp(%d) + minDownRamp(%d) >= N(%d)",
+                                                    maxUpRamp, maxDownRamp, minUpRamp, minDownRamp, N)
+        log.Infof("ASPA validation successful")
+        return ASPAValid
+    }
+}
+
+func (r *Router) computeUpRamp(uniqueASes []*Router, N int) (int, int) {
+    log.Infof("Computing up ramp")
+    maxUpRamp := N
+    minUpRamp := N
+    log.Infof("Max and min up ramp set to N(%d) initially", N)
+    for i := 0; i+1 < N; i++ { 
+        currAS := uniqueASes[i]
+        nextAS := uniqueASes[i+1]
+        log.Infof("Current AS: %d, Next AS: %d", currAS.ASNumber, nextAS.ASNumber)
+
+        authResult := r.authorized(currAS, nextAS)
+        log.Infof("Authorization result: %v", authResult)
+        if authResult == "Not Provider+" && maxUpRamp == N {
+            log.Infof("Max up ramp set to %d", i+1)
+            maxUpRamp = i + 1
+        }
+        if (authResult == "Not Provider+" || authResult == "No Attestation") && minUpRamp == N {
+            log.Infof("Min up ramp set to %d", i+1)
+            minUpRamp = i + 1
         }
     }
-    fmt.Println()
+    return maxUpRamp, minUpRamp
+}
 
-    if !exists {
-        log.Warnf("Neighbor AS%d not found in neighbor relations for AS%d", neighborAS, ap.Router.ASNumber)
-        // Decide how to handle unknown neighbor relations (e.g., treat as Invalid)
-        return false
+func (r *Router) computeDownRamp(uniqueASes []*Router, N int) (int, int) {
+    log.Infof("Computing down ramp")
+    maxDownRamp := N
+    minDownRamp := N
+    for i := N - 1; i > 0; i-- {
+        currAS := uniqueASes[i]
+        prevAS := uniqueASes[i-1]
+        log.Infof("Current AS: %d, Previous AS: %d", currAS.ASNumber, prevAS.ASNumber)
+        authResult := r.authorized(currAS, prevAS)
+        log.Infof("Authorization result: %v", authResult)
+        if authResult == "Not Provider+" && maxDownRamp == N {
+            log.Infof("Max down ramp set to %d", N-i)
+            maxDownRamp = N - i
+        }
+        if (authResult == "Not Provider+" || authResult == "No Attestation") && minDownRamp == N {
+            log.Infof("Min down ramp set to %d", N-i)
+            minDownRamp = N - i
+        }
     }
-      
-    var neighborRelation Relation = neighbor.Relation
-    var outcome protocols.Outcome
-    log.Infof("Neighbor relation: %v", neighborRelation)
+    return maxDownRamp, minDownRamp
+}
 
-    // Apply the appropriate verification algorithm based on neighbor relation
-    log.Infof("Fetching RPKI instance")
-    
-    // Initializing U_SPAS table from RPKI.ASPA of the current router
-    USPAS := ap.Router.ASPA.USPAS
-
-    log.Infof("S-USPAS validation %v", USPAS)
-    log.Infof("AS%d from which the route is received, and destination route AS%d", ap.Router.ASNumber, 
-                                                                      compressedPath[len(compressedPath)-1])
-    switch neighborRelation {
-    case Customer, Peer:
-        // Use the upstream verification algorithm
-        // asPath []int, neighborAS int, isRSClient bool, uspaspTable USPASTable
-        log.Infof("Evaluating under customer or peer relation")
-        log.Infof("AS%d verifying route to AS%d: ASPA validation", ap.Router.ASNumber, route.Dest.ASNumber)
-        outcome, _ = protocols.UpstreamVerifyASPath(ap.Router.ASNumber, compressedPath, USPAS)        
-    case Provider:
-        // Use the downstream verification algorithm
-        log.Infof("Evaluating under provider relation")
-        log.Infof("AS%d verifying route to AS%d: ASPA validation", ap.Router.ASNumber, route.Dest.ASNumber)
-        outcome, _ = protocols.DownstreamVerifyASPath(ap.Router.ASNumber, compressedPath, USPAS)
-  
-    default:
-        // If relation is unknown or complex, treat as Invalid
-        log.Warnf("Unknown or unsupported neighbor relation for AS%d", neighborAS)
-        outcome = protocols.Invalid
+func (r *Router) authorized(cas *Router, pas *Router) string {
+    if cas.ASPAList == nil || len(cas.ASPAList) == 0 {
+        return "No Attestation"
     }
-
-    if outcome == protocols.Valid {
-        log.Infof("AS%d accepted route to AS%d: ASPA validation %s", ap.Router.ASNumber, route.Dest.ASNumber, outcome)
-        return true
-    } else {
-        log.Infof("AS%d rejected route to AS%d: ASPA validation %s", ap.Router.ASNumber, route.Dest.ASNumber, outcome)
-        return false
+    providers := cas.ASPAList[0].ASPASet
+    if containsInt(providers, pas.ASNumber) {
+        return "Provider+"
     }
+    return "Not Provider+"
+}
+
+
+
+func containsInt(s []int, e int) bool {
+    for _, a := range s {
+        if a == e {
+            return true
+        }
+    }
+    return false
 }
 
 // Method for preferring route, by comparing the two routes, and choosing the preferred one
@@ -186,3 +295,33 @@ func (ap *ASPAPolicy) ForwardTo(route *Route, relation Relation) bool {
   return firstHopRel == Customer || relation == Customer  
 }
 
+
+// Helper function for checking if an element exists in a slice
+func contains(s []int, e int) bool {
+  for _, a := range s {
+      if a == e {
+          return true
+      }
+  }
+  return false
+}
+
+// ASPAResult represents the outcome of the ASPA algorithm.
+type ASPAResult string
+
+const (
+    ASPAValid   ASPAResult = "Valid"
+    ASPAInvalid ASPAResult = "Invalid"
+    ASPAUnknown ASPAResult = "Unknown"
+)
+
+// Helper function to check if a key exists in a map[int]struct{}
+func Contains(m map[int]struct{}, key int) bool {
+	_, exists := m[key]
+	return exists
+}
+
+// Check if ASPA exists in the router
+func hasASPA(router *Router) bool {
+  return router.ASPAList != nil && len(router.ASPAList) > 0
+}

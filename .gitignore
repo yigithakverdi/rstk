@@ -35,4 +35,4 @@ docs/routing-configuration.md
 # kathara
 
 # Ignore CLI related files
-.cli_history
+logs/.cli_history

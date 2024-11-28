@@ -24,6 +24,7 @@
 - [ ] When adding a new router to the topology if the router already exists in the topology then following operations are not currently handled (for temporarily assuming everytime a new unique router is added to the topology, since our test topology is small)
 - [ ] Referencing routers, from topology, when adding a new router, especially when working with neighbors is a bit problematic, sometimes new instances of a router could mistakenly referenced instead of the actual router instances from the topology, also ASES synchronizaiton with the topology is another problem, when adding a new router to topology ASES needs the same treatment as well, with all the routers etc.
 - [ ] Might resolve this by referncing routers with the AS number from the topology directly when building the ASES 
+- [ ] There is some inconsistency on the AcceptRoute bool check, such as on the default policies `AcceptRoute` we do `!containsCycle` and this reflects on the `LearnRoute` method, where we do `!AcceptRoute` while there is no `!containsCycle` on the `AcceptRoute` of the ASPA policy
 
 # Things to Do After Base Route Logic and Hijacking Implementation
 - [ ] Adding attributes to Route and Router structs for supporting ASPA and AS-Cones list

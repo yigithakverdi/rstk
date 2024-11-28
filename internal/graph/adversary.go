@@ -18,17 +18,25 @@ import (
 
 )
 
+func printRouteQueue(q deque.Deque) {
+  fmt.Print("Queue: ")
+  for i := 0; i < q.Len(); i++ {
+    route := q.Peek(i).(*router.Route)
+    fmt.Printf("%v ", route.PathASNumbers())
+  }
+  fmt.Println()
+}
 
 // Method for hijacking given n hops, such as n = 0 means, path is only the attacker itself,
 // n = 1 means path is attacker and victim AS, and more then n means there are random or 
 // carefuly crafted ASes in the middle
 func (t *Topology) Hijack(victim *router.Router, attacker *router.Router, n int) {
-  log.Infof("Starting route hijacking from attacker AS%d to vicmtim AS%d", victim.ASNumber, 
+  log.Infof("Starting route hijacking from victim AS%d to attacker AS%d", victim.ASNumber, 
     attacker.ASNumber)
   if n < 0 {
     fmt.Println("number of hops must be non-negative")
     return
-  }
+  } 
 
   var path []*router.Router
 
@@ -38,7 +46,7 @@ func (t *Topology) Hijack(victim *router.Router, attacker *router.Router, n int)
     path = []*router.Router{attacker}
   } else if n == 1 {
     // Attacker claims a direct path to victim
-    log.Debugf("Attacker claims a direct path to victim")
+    log.Debugf("Attacker AS%d claims a direct path to victim AS%d", attacker.ASNumber, victim.ASNumber)
     path = []*router.Router{victim, attacker}
   } else {
     // Attacker includes random ASes in the path
@@ -88,6 +96,7 @@ func (t *Topology) Hijack(victim *router.Router, attacker *router.Router, n int)
   }
   
   for routes.Len() > 0 {
+    printRouteQueue(routes)
     route := routes.PopFront().(*router.Route)
     final := route.Path[len(route.Path)-1]
     log.Debugf("Processing route to AS%d via AS%d", route.Dest.ASNumber, final.ASNumber)
