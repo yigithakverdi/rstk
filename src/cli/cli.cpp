@@ -1,12 +1,12 @@
 #include "cli/cli.hpp"
 #include "cli/commands.hpp"
 #include "cli/ui.hpp"
+#include <iomanip>
 #include <iostream>
 #include <readline/chardefs.h>
 #include <readline/history.h>
 #include <readline/readline.h>
 #include <sstream>
-#include <iomanip>
 #include <thread>
 #include <variant>
 
@@ -203,44 +203,42 @@ CommandResult CLI::handleLoadTopology(const std::vector<std::string> &args, CLIS
   // Create and start spinner
   Spinner spinner;
   spinner.start();
-  std::cout << "\n"; // Add some spacing
+  std::cout << "\nLoading topology from " << args[0] << "...\n";
 
   bool success = false;
   std::string message;
 
   try {
-    // Show loading message with spinner
-    while (!success) {
-      spinner.update();
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Attempt to load topology
+    success = state.getEngine().loadTopology(args[0]);
 
-      if (state.getEngine().loadTopology(args[0])) {
-        success = true;
+    if (success) {
+      // Get the topology to show relationship count
+      auto topology = state.getEngine().getTopology();
+      size_t relationCount = topology->G->nodes.size();
 
-        // Get the topology to show relationship count
-        auto topology = state.getEngine().getTopology();
-        size_t relationCount = topology->G->nodes.size();
-
-        message = "Loaded topology from " + args[0] + "\nTopology has " +
-                  std::to_string(relationCount) + " relationships";
-        break;
-      }
+      message = "Loaded topology from " + args[0] + "\nTopology has " +
+                std::to_string(relationCount) + " relationships";
+    } else {
+      // If loadTopology returns false, retrieve the last error
+      message = "Failed to load topology: " + state.getEngine().getLastError();
     }
+
   } catch (const std::exception &e) {
-    spinner.stop();
-    throw std::runtime_error(e.what());
+    message = "Exception occurred while loading topology: " + std::string(e.what());
   }
 
   // Stop spinner and clear its line
   spinner.stop();
-  std::cout << "\033[1A"; // Move cursor up one line
-  std::cout << "\033[2K"; // Clear the line
 
-  if (!success) {
-    throw std::runtime_error(state.getEngine().getLastError());
+  if (success) {
+    std::cout << "Loaded topology from " << args[0] << "\nTopology has "
+              << std::to_string(state.getEngine().getTopology()->G->nodes.size())
+              << " relationships\n";
+    return CommandResult(message);
+  } else {
+    throw std::runtime_error(message);
   }
-
-  return CommandResult(message);
 }
 
 // Example run experiment command handler

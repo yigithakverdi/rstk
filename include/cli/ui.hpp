@@ -1,7 +1,13 @@
 #pragma once
+#include <atomic>
+#include <chrono>
+#include <functional>
+#include <iostream>
+#include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
-
 
 /**
  * A simple progress bar for long-running tasks.
@@ -36,22 +42,80 @@ private:
  */
 class Spinner {
 public:
-  Spinner();
+  Spinner() : running_(false), current_frame_(0), frames_{"|", "/", "-", "\\"} {}
 
-  /// Start the spinner animation
-  void start();
+  void start() {
+    running_ = true;
+    spinner_thread_ = std::thread([this]() {
+      while (running_) {
+        std::cout << "\r" << frames_[current_frame_] << " Working..." << std::flush;
+        current_frame_ = (current_frame_ + 1) % frames_.size();
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
+    });
+  }
 
-  /// Stop the spinner animation
-  void stop();
+  void stop() {
+    running_ = false;
+    if (spinner_thread_.joinable())
+      spinner_thread_.join();
+    // Clear the spinner line
+    std::cout << "\r" << " " << "           " << "\r" << std::flush;
+  }
 
-  /// Update the spinner frame (rotate symbols)
-  void update();
-
-  /// Check if the spinner is currently running
-  bool isRunning() const;
+  // Optional: Prevent copying
+  Spinner(const Spinner &) = delete;
+  Spinner &operator=(const Spinner &) = delete;
 
 private:
-  bool running_;
+  std::atomic<bool> running_;
   int current_frame_;
   std::vector<std::string> frames_;
+  std::thread spinner_thread_;
+};
+
+class MultiProgressDisplay {
+public:
+  struct ProgressData {
+    std::atomic<size_t> current{0};
+    std::atomic<size_t> total{0};
+    std::chrono::steady_clock::time_point start_time;
+    std::chrono::steady_clock::time_point last_update;
+    std::string description;
+    double estimated_time_remaining{0.0};
+  };
+
+  MultiProgressDisplay(size_t num_bars);
+  ~MultiProgressDisplay();
+
+  // Initialize a specific progress bar
+  void initBar(size_t index, const std::string &description, size_t total);
+
+  // Update progress for a specific bar
+  void updateProgress(size_t index, size_t current);
+
+  // Start/stop the display refresh thread
+  void start();
+  void stop();
+
+  // Force a refresh of the display
+  void refresh();
+
+private:
+  static constexpr int BAR_WIDTH = 30;
+  static constexpr auto REFRESH_RATE = std::chrono::milliseconds(100);
+
+  // Thread-safe console output
+  void clearLines(int count);
+  void moveCursorUp(int lines);
+  void displayBars();
+
+  std::string formatTime(double seconds) const;
+  std::string createBar(double percentage) const;
+  std::string formatProgressBar(const ProgressData &data) const;
+
+  std::vector<ProgressData> progress_bars_;
+  std::mutex display_mutex_;
+  std::atomic<bool> running_{false};
+  std::unique_ptr<std::thread> refresh_thread_;
 };

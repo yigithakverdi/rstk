@@ -40,7 +40,8 @@
   methods under topology to reset all routers plugins, policies and protocols
 - [ ] Protocol specific commands, such as when implementing a protocol, it's
   commands should be implemented under the protocol classes as well
-
+- [ ] Experiments could run on separate threads, and progress could be shown
+      on the CLI row by row with progress bar for each
 
 Temporarl storing the experiment old template version here: ```cpp // To
 implement experiments, use the following template class NewExperiment : public

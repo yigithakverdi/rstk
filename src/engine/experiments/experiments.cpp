@@ -4,6 +4,7 @@
 #include "router/router.hpp"
 #include <chrono>
 #include <memory>
+#include <thread>
 
 ExperimentProgress::ExperimentProgress(size_t total)
     : total_(total), start_time_(std::chrono::steady_clock::now()) {}
@@ -43,7 +44,7 @@ std::string ExperimentProgress::estimateTimeRemaining() {
 
 ExperimentWorker::ExperimentWorker(std::queue<Trial> &input_queue, std::queue<double> &output_queue,
                                    std::shared_ptr<Topology> topology)
-    : input_queue_(input_queue), output_queue_(output_queue), topology_(topology), stopped_(false) {
+    : topology_(topology), input_queue_(input_queue), output_queue_(output_queue), stopped_(false) {
 }
 
 void ExperimentWorker::stop() { stopped_ = true; }

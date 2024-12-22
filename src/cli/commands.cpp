@@ -230,11 +230,6 @@ void registerAllCommands(CLI &cli) {
                          std::string exp_type = args[0];
                          std::vector<std::string> exp_args(args.begin() + 1, args.end());
 
-                         // Start experiment through engine
-                         if (!state.getEngine().startExperiment(exp_type, exp_args)) {
-                           throw std::runtime_error(state.getEngine().getLastError());
-                         }
-
                          // Header display (keep existing display logic)
                          std::stringstream ss;
                          ss << "┌──────────────────────────────────────────┐\n";
@@ -242,6 +237,11 @@ void registerAllCommands(CLI &cli) {
                             << " │\n";
                          ss << "└──────────────────────────────────────────┘\n\n";
                          std::cout << ss.str();
+
+                         // Start experiment through engine
+                         if (!state.getEngine().startExperiment(exp_type, exp_args)) {
+                           throw std::runtime_error(state.getEngine().getLastError());
+                         }
 
                          // Engine will handle the experiment execution and progress
                          // updates through event callbacks, which will be handled in

@@ -90,12 +90,6 @@ void Engine::shutdown() {
   registered_protocols_.clear();
   plugins_.clear();
 
-  // Clear queues
-  while (!input_queue_.empty())
-    input_queue_.pop();
-  while (!output_queue_.empty())
-    output_queue_.pop();
-
   // Clear callbacks
   event_callbacks_.clear();
   plugin_callbacks_.clear();
@@ -155,12 +149,6 @@ bool Engine::startExperiment(const std::string &experiment_type,
   }
 
   try {
-    // Clear queues
-    while (!input_queue_.empty())
-      input_queue_.pop();
-    while (!output_queue_.empty())
-      output_queue_.pop();
-
     // Create new experiment through registry
     auto &registry = ExperimentRegistry::Instance();
     if (!registry.hasExperiment(experiment_type)) {
@@ -168,7 +156,9 @@ bool Engine::startExperiment(const std::string &experiment_type,
       return false;
     }
 
-    current_experiment_ = registry.createExperiment(experiment_type, input_queue_, output_queue_,
+    std::queue<Trial> input_queue;
+    std::queue<double> output_queue;
+    current_experiment_ = registry.createExperiment(experiment_type, input_queue, output_queue,
                                                     topology_, parameters);
 
     // Initialize experiment state
@@ -251,10 +241,6 @@ bool Engine::stopExperiment() {
 
       // Clean up
       current_experiment_.reset();
-      while (!input_queue_.empty())
-        input_queue_.pop();
-      while (!output_queue_.empty())
-        output_queue_.pop();
 
       setState(EngineState::INITIALIZED);
       notifyEventListeners(ExperimentEvent::COMPLETED, "Experiment stopped");
@@ -607,12 +593,6 @@ void Engine::cleanupExperiment() {
 
     // Clear experiment state
     experiment_state_ = ExperimentState{};
-
-    // Clear queues
-    while (!input_queue_.empty())
-      input_queue_.pop();
-    while (!output_queue_.empty())
-      output_queue_.pop();
 
     // Reset experiment pointer
     current_experiment_.reset();

@@ -3,8 +3,9 @@
 #define EXPERIMENT_REGISTRY_HPP
 
 #include "engine/experiments/experiments.hpp"
-#include "engine/experiments/registry/rhijack.hpp"
 #include "engine/experiments/registry/raspa.hpp"
+#include "engine/experiments/registry/rcaida.hpp"
+#include "engine/experiments/registry/rhijack.hpp"
 #include <functional>
 #include <memory>
 #include <string>
@@ -32,15 +33,13 @@ public:
   }
 
   template <typename T>
-  void registerExperiment(const std::string &name,
-                          const std::string &description,
+  void registerExperiment(const std::string &name, const std::string &description,
                           const std::vector<std::string> &parameters) {
     ExperimentInfo info{name, description, parameters,
                         [](std::queue<Trial> &input, std::queue<double> &output,
                            std::shared_ptr<Topology> topology,
                            const std::vector<std::string> &args) {
-                          return createExperiment<T>(input, output, topology,
-                                                     args);
+                          return createExperiment<T>(input, output, topology, args);
                         }};
     experiments_[name] = info;
   }
@@ -56,10 +55,8 @@ public:
 
   // Create an experiment instance
   std::unique_ptr<ExperimentWorker>
-  createExperiment(const std::string &name, std::queue<Trial> &input,
-                   std::queue<double> &output,
-                   std::shared_ptr<Topology> topology,
-                   const std::vector<std::string> &args) {
+  createExperiment(const std::string &name, std::queue<Trial> &input, std::queue<double> &output,
+                   std::shared_ptr<Topology> topology, const std::vector<std::string> &args) {
 
     auto it = experiments_.find(name);
     if (it == experiments_.end()) {
@@ -91,17 +88,14 @@ private:
   template <typename T>
   static std::unique_ptr<ExperimentWorker>
   createExperiment(std::queue<Trial> &input, std::queue<double> &output,
-                   std::shared_ptr<Topology> topology,
-                   const std::vector<std::string> &args) {
+                   std::shared_ptr<Topology> topology, const std::vector<std::string> &args) {
 
     if constexpr (std::is_same_v<T, RouteHijackExperiment>) {
       if (args.size() < 1) {
-        throw std::runtime_error(
-            "RouteHijackExperiment requires n_hops parameter");
+        throw std::runtime_error("RouteHijackExperiment requires n_hops parameter");
       }
       int n_hops = std::stoi(args[0]);
-      return std::make_unique<RouteHijackExperiment>(input, output, topology,
-                                                     n_hops);
+      return std::make_unique<RouteHijackExperiment>(input, output, topology, n_hops);
     } else if constexpr (std::is_same_v<T, ASPADeploymentExperiment>) {
       if (args.size() < 2) {
         throw std::runtime_error("ASPADeploymentExperiment requires object and "
@@ -109,8 +103,15 @@ private:
       }
       double obj_pct = std::stod(args[0]);
       double pol_pct = std::stod(args[1]);
-      return std::make_unique<ASPADeploymentExperiment>(input, output, topology,
-                                                        obj_pct, pol_pct);
+      return std::make_unique<ASPADeploymentExperiment>(input, output, topology, obj_pct, pol_pct);
+    } else if constexpr (std::is_same_v<T, CAIDAExperiment>) { // Add this branch
+      if (args.size() < 2) {
+        throw std::runtime_error(
+            "CAIDAExperiment requires object and policy deployment percentages");
+      }
+      double obj_pct = std::stod(args[0]);
+      double pol_pct = std::stod(args[1]);
+      return std::make_unique<CAIDAExperiment>(input, output, topology, obj_pct, pol_pct);
     }
     // Add more experiment types here
     else {
@@ -120,21 +121,23 @@ private:
 };
 
 // Macro to help register experiments
-#define REGISTER_EXPERIMENT(TYPE, NAME, DESC, ...)                             \
-  ExperimentRegistry::Instance().registerExperiment<TYPE>(                     \
-      NAME, DESC, std::vector<std::string>{__VA_ARGS__})
+#define REGISTER_EXPERIMENT(TYPE, NAME, DESC, ...)                                                 \
+  ExperimentRegistry::Instance().registerExperiment<TYPE>(NAME, DESC,                              \
+                                                          std::vector<std::string>{__VA_ARGS__})
 
 // Function to initialize all experiments
 inline void initializeExperiments() {
-  REGISTER_EXPERIMENT(RouteHijackExperiment, "route-hijack",
-                      "Simulates route hijacking attacks",
+  REGISTER_EXPERIMENT(RouteHijackExperiment, "route-hijack", "Simulates route hijacking attacks",
                       "n_hops: Number of hops in attack path");
 
-  REGISTER_EXPERIMENT(
-      ASPADeploymentExperiment, "aspa-deployment",
-      "Tests ASPA deployment strategies",
-      "object_deployment: Percentage of ASPA objects to deploy",
-      "policy_deployment: Percentage of ASPA policies to deploy");
+  REGISTER_EXPERIMENT(ASPADeploymentExperiment, "aspa-deployment",
+                      "Tests ASPA deployment strategies",
+                      "object_deployment: Percentage of ASPA objects to deploy",
+                      "policy_deployment: Percentage of ASPA policies to deploy");
+
+  REGISTER_EXPERIMENT(CAIDAExperiment, "caida", "Simulates ASPA deployment using CAIDA data",
+                      "object_deployment: Percentage of ASPA objects to deploy",
+                      "policy_deployment: Percentage of ASPA policies to deploy");
 }
 
 #endif // EXPERIMENT_REGISTRY_HPP

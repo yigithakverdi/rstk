@@ -178,8 +178,6 @@ private:
   std::unique_ptr<ExperimentWorker> current_experiment_;
   ExperimentState experiment_state_;
   std::vector<EventCallback> event_callbacks_;
-  std::queue<Trial> input_queue_;
-  std::queue<double> output_queue_;
 
   // Core components
   std::shared_ptr<Topology> topology_;
