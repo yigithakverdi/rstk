@@ -3,11 +3,11 @@
 #include "router/relation.hpp"
 #include "router/route.hpp"
 #include "router/router.hpp"
+#include "logger/logger.hpp"
 
 ASPAObject::ASPAObject(int customerAS, const std::vector<int> &providerASes,
                        const std::vector<unsigned char> &signature)
-    : customerAS(customerAS), providerASes(providerASes), signature(signature) {
-}
+    : customerAS(customerAS), providerASes(providerASes), signature(signature) {}
 
 ASPAPolicyEngine::ASPAPolicyEngine(std::shared_ptr<RPKI> rpki) : rpki_(rpki) {}
 
@@ -24,8 +24,7 @@ bool ASPAPolicyEngine::shouldAcceptRoute(const Route &route) const {
   return result != ASPAResult::Invalid;
 }
 
-bool ASPAPolicyEngine::shouldPreferRoute(const Route &currentRoute,
-                                         const Route &newRoute) const {
+bool ASPAPolicyEngine::shouldPreferRoute(const Route &currentRoute, const Route &newRoute) const {
   if (currentRoute.destination != newRoute.destination) {
     return false;
   }
@@ -64,14 +63,12 @@ void ASPAProtocol::updateUSPAS() {
       }
     }
 
-    ASPAObject unionObj(customerAS, unionProviders,
-                        std::vector<unsigned char>());
+    ASPAObject unionObj(customerAS, unionProviders, std::vector<unsigned char>());
     rpki_->USPAS[customerAS] = unionObj;
   }
 }
 
-std::vector<std::function<int(const Route &)>>
-ASPAPolicyEngine::PreferenceRules() const {
+std::vector<std::function<int(const Route &)>> ASPAPolicyEngine::PreferenceRules() const {
   return {[this](const Route &route) { return localPref(route); },
           [this](const Route &route) { return asPathLength(route); },
           [this](const Route &route) { return nextHopASNumber(route); }};
@@ -107,8 +104,7 @@ int ASPAPolicyEngine::nextHopASNumber(const Route &route) const {
   return nextHopRouter->ASNumber;
 }
 
-bool ASPAPolicyEngine::canForwardRoute(Relation first,
-                                       Relation relation) const {
+bool ASPAPolicyEngine::canForwardRoute(Relation first, Relation relation) const {
   if (first == Relation::Customer) {
     return false;
   }
@@ -123,9 +119,7 @@ void ASPAProtocol::addASPAObject(const ASPAObject &obj) {
   updateUSPAS();
 }
 
-std::vector<ASPAObject> ASPAProtocol::getAllASPAObjects() const {
-  return aspaSet_;
-}
+std::vector<ASPAObject> ASPAProtocol::getAllASPAObjects() const { return aspaSet_; }
 
 ASPAObject ASPAProtocol::getASPAObject(Router *customerAS) const {
   for (const auto &obj : aspaSet_) {
@@ -206,8 +200,7 @@ std::pair<int, int> ASPAPolicyEngine::computeUpRamp(const Route &route) const {
   return std::make_pair(maxUpRamp, minUpRamp);
 }
 
-std::pair<int, int>
-ASPAPolicyEngine::computeDownRamp(const Route &route) const {
+std::pair<int, int> ASPAPolicyEngine::computeDownRamp(const Route &route) const {
   int N = route.path.size();
   int maxDownRamp = N;
   int minDownRamp = N;
@@ -237,8 +230,7 @@ ASPAPolicyEngine::computeDownRamp(const Route &route) const {
   return std::make_pair(maxDownRamp, minDownRamp);
 }
 
-ASPAAuthResult ASPAPolicyEngine::authorized(Router *currAS,
-                                            Router *nextAS) const {
+ASPAAuthResult ASPAPolicyEngine::authorized(Router *currAS, Router *nextAS) const {
   std::stringstream log_msg;
   Relation relation = currAS->GetRelation(nextAS);
 
@@ -256,8 +248,8 @@ ASPAAuthResult ASPAPolicyEngine::authorized(Router *currAS,
     log_msg << provider << " ";
   }
 
-  bool isProviderAuthorized = std::find(providers.begin(), providers.end(),
-                                        nextAS->ASNumber) != providers.end();
+  bool isProviderAuthorized =
+      std::find(providers.begin(), providers.end(), nextAS->ASNumber) != providers.end();
 
   if (isProviderAuthorized) {
     return ASPAAuthResult::ProviderPlus;
@@ -266,8 +258,7 @@ ASPAAuthResult ASPAPolicyEngine::authorized(Router *currAS,
   return ASPAAuthResult::NotProviderPlus;
 }
 
-ASPAResult
-ASPAPolicyEngine::upstreamPathVerification(const Route &route) const {
+ASPAResult ASPAPolicyEngine::upstreamPathVerification(const Route &route) const {
   int N = route.path.size();
 
   auto [maxUpRamp, minUpRamp] = computeUpRamp(route);
@@ -284,8 +275,7 @@ ASPAPolicyEngine::upstreamPathVerification(const Route &route) const {
   }
 }
 
-ASPAResult
-ASPAPolicyEngine::downstreamPathVerification(const Route &route) const {
+ASPAResult ASPAPolicyEngine::downstreamPathVerification(const Route &route) const {
   int N = route.path.size();
 
   auto [maxUpRamp, minUpRamp] = computeUpRamp(route);
@@ -303,133 +293,133 @@ ASPAPolicyEngine::downstreamPathVerification(const Route &route) const {
 ASPAResult ASPAPolicyEngine::PerformASPA(const Route &route) const {
   Router *final = route.path.back();
   Router *firstHop = route.path[route.path.size() - 2];
+  LOG.debug("Performing ASPA verification for route: " + route.ToString());
+
+  ASPAResult result = ASPAResult::Valid;
+  bool hasNoAttestation = false;
+  LOG.debug("Final: " + std::to_string(final->ASNumber) + " FirstHop: " + std::to_string(firstHop->ASNumber));
 
   if (final == nullptr || route.path.empty()) {
+    LOG.error("Route is not properly defined or empty");
     throw std::runtime_error("Route is not properly defined or empty");
   }
 
   Relation relation = final->GetRelation(firstHop);
-  ASPAResult result = ASPAResult::Unknown;
+  LOG.debug("Relation: " + std::to_string(static_cast<int>(relation)));
+  if (relation == Relation::Unknown) {
+    LOG.error("Unknown relation between final and first hop");
+    return ASPAResult::Unknown;
+  }
+
+  if (route.path.size() < 2) {
+    LOG.error("Route length below verifiable!");
+    throw std::runtime_error("Route length below verifiable!");
+  }
+
+  if (route.path.size() == 2) {
+    LOG.debug("Route length is 2, no need for ASPA verification");
+    return ASPAResult::Valid;
+  }
 
   auto checkAuth = [this](Router *currAS, Router *nextAS) -> ASPAAuthResult {
+    LOG.debug("Checking authorization between " + std::to_string(currAS->ASNumber) + " and " + std::to_string(nextAS->ASNumber));
     return this->authorized(currAS, nextAS);
   };
 
   if (relation == Relation::Customer || relation == Relation::Peer) {
-    if (route.path.size() < 2) {
-      throw std::runtime_error("Route length below verifyable!");
-    } else if (route.path.size() == 2) {
-      result = ASPAResult::Valid;
-    } else {
-      result = ASPAResult::Valid;
-      for (size_t i = 0; i < route.path.size(); i++) {
-        if (i + 1 < route.path.size()) {
-          Router *curr_asys = route.path[i];
-          Router *next_asys = route.path[i + 1];
+    LOG.debug("Performing upstream path verification");
+    bool seenPeer = false;
 
-          ASPAAuthResult auth = checkAuth(curr_asys, next_asys);
-          if (auth == ASPAAuthResult::NotProviderPlus) {
-            result = ASPAResult::Invalid;
-            break;
-          } else if (auth == ASPAAuthResult::NoAttestation) {
-            result = ASPAResult::Unknown;
-            break;
-          } else {
-            continue;
-          }
+    for (size_t i = 0; i < route.path.size() - 1; i++) {
+      Router *curr_asys = route.path[i];
+      Router *next_asys = route.path[i + 1];
+      LOG.debug("Checking authorization between " + std::to_string(curr_asys->ASNumber) + " and " 
+                + std::to_string(next_asys->ASNumber));
+
+      ASPAAuthResult auth = checkAuth(curr_asys, next_asys);
+      LOG.debug("Authorization result: " + std::to_string(static_cast<int>(auth)));
+
+      if (auth == ASPAAuthResult::Peer) {
+        LOG.debug("Peer relation found");
+        if (seenPeer) {
+          LOG.debug("It's the second peer relation, invalid path");
+          return ASPAResult::Invalid;
         }
+        LOG.debug("It's the first peer relation");
+        seenPeer = true;
+      }
+
+      if (auth == ASPAAuthResult::NotProviderPlus) {
+        LOG.debug("NotProviderPlus relation found, invalid path");
+        return ASPAResult::Invalid;
+      }
+
+      if (auth == ASPAAuthResult::NoAttestation) {
+        hasNoAttestation = true;
+      }
+    }
+  } 
+
+  else if (relation == Relation::Provider) {
+    LOG.debug("Performing downstream path verification");
+
+    // Provider path verification
+    size_t u_min = route.path.size();
+    size_t v_max = 0;
+    
+    // Find u_min (first NotProviderPlus in forward direction)
+    for (size_t i = 0; i < route.path.size() - 1; i++) {
+      Router *curr_asys = route.path[i];
+      Router *next_asys = route.path[i + 1];
+      LOG.debug("Checking authorization between " + std::to_string(curr_asys->ASNumber) + " and " 
+                + std::to_string(next_asys->ASNumber));
+
+      ASPAAuthResult auth = checkAuth(curr_asys, next_asys);
+      LOG.debug("Authorization result: " + std::to_string(static_cast<int>(auth)));
+      if (auth == ASPAAuthResult::NotProviderPlus) {
+        LOG.debug("NotProviderPlus relation found, setting u_min");
+        u_min = i + 2;
+        break;
+      }
+      if (auth == ASPAAuthResult::NoAttestation) {
+        LOG.debug("NoAttestation found");
+        hasNoAttestation = true;
       }
     }
 
-  } else if (relation == Relation::Provider) {
-    if (route.path.size() < 2) {
-      throw std::runtime_error("Route length below verifyable!");
-    } else if (route.path.size() == 2 || route.path.size() == 3) {
-      result = ASPAResult::Valid;
-    } else {
-      size_t u_min = route.path.size();
-      for (size_t i = 0; i < route.path.size(); i++) {
-        if (i + 1 < route.path.size()) {
-          Router *curr_asys = route.path[i];
-          Router *next_asys = route.path[i + 1];
+    // Find v_max (first NotProviderPlus in reverse direction)
+    for (size_t i = route.path.size() - 1; i > 0; i--) {
+      Router *curr_asys = route.path[i];
+      Router *prev_asys = route.path[i - 1];
+      LOG.debug("Checking authorization between " + std::to_string(curr_asys->ASNumber) + " and " 
+                + std::to_string(prev_asys->ASNumber));
 
-          ASPAAuthResult auth = checkAuth(curr_asys, next_asys);
-          if (auth == ASPAAuthResult::NotProviderPlus) {
-            u_min = i + 2;
-            break;
-          }
-        }
+      ASPAAuthResult auth = checkAuth(curr_asys, prev_asys);
+      if (auth == ASPAAuthResult::NotProviderPlus) {
+        LOG.debug("NotProviderPlus relation found, setting v_max");
+        v_max = i;
+        break;
       }
-
-      size_t v_max = 0;
-      for (size_t i = 0; i < route.path.size(); i++) {
-        if (i == 0)
-          continue;
-        if (i + 1 < route.path.size()) {
-          size_t curr_idx = route.path.size() - 1 - i;
-          size_t next_idx = route.path.size() - 1 - (i + 1);
-
-          Router *curr_asys = route.path[curr_idx];
-          Router *next_asys = route.path[next_idx];
-
-          ASPAAuthResult auth = checkAuth(curr_asys, next_asys);
-          if (auth == ASPAAuthResult::NotProviderPlus) {
-            v_max = next_idx + 1;
-            break;
-          }
-        }
-      }
-
-      if (u_min <= v_max) {
-        result = ASPAResult::Invalid;
-      }
-
-      if (result != ASPAResult::Invalid) {
-        size_t k = 1;
-        for (size_t i = 0; i < route.path.size(); i++) {
-          if (i + 1 < route.path.size()) {
-            Router *curr_asys = route.path[i];
-            Router *next_asys = route.path[i + 1];
-            ASPAAuthResult auth = checkAuth(curr_asys, next_asys);
-            if (auth == ASPAAuthResult::ProviderPlus) {
-              k = i + 2;
-            } else {
-              break;
-            }
-          }
-        }
-
-        size_t l = route.path.size() - 1;
-        for (size_t i = 0; i < route.path.size(); i++) {
-          if (i == 0)
-            continue;
-          if (i + 1 < route.path.size()) {
-            size_t curr_idx = route.path.size() - 1 - i;
-            size_t next_idx = route.path.size() - 1 - (i + 1);
-
-            Router *curr_asys = route.path[curr_idx];
-            Router *next_asys = route.path[next_idx];
-            ASPAAuthResult auth = checkAuth(curr_asys, next_asys);
-            if (auth == ASPAAuthResult::ProviderPlus) {
-              l = next_idx + 1;
-            } else {
-              break;
-            }
-          }
-        }
-
-        if (static_cast<int>(l) - static_cast<int>(k) <= 1) {
-          result = ASPAResult::Valid;
-        } else {
-          result = ASPAResult::Unknown;
-        }
+      if (auth == ASPAAuthResult::NoAttestation) {
+        LOG.debug("NoAttestation found");
+        hasNoAttestation = true;
       }
     }
 
+    if (u_min <= v_max) {
+      LOG.debug("u_min: " + std::to_string(u_min) + " v_max: " + std::to_string(v_max));
+      return ASPAResult::Invalid;
+    }
   } else {
-    throw std::runtime_error("Unknown relationship type");
+    LOG.error("Unknown relation between final and first hop");
+    return ASPAResult::Unknown;
   }
 
+  // Final result determination
+  if (hasNoAttestation) {
+    LOG.debug("No attestation found, unknown path");
+    return ASPAResult::Unknown;
+  }
   return result;
 }
 
@@ -447,8 +437,7 @@ std::string ASPAProtocol::getDetailedProtocolInfo() const {
   return ss.str();
 }
 
-std::pair<int, int>
-ASPAProtocol::getDeploymentStats(const Topology &topology) const {
+std::pair<int, int> ASPAProtocol::getDeploymentStats(const Topology &topology) const {
   int objectCount = 0;
   int policyCount = 0;
 
@@ -456,8 +445,7 @@ ASPAProtocol::getDeploymentStats(const Topology &topology) const {
     if (router->proto && router->proto->getProtocolName() == "ASPA") {
       policyCount++;
     }
-    if (topology.RPKIInstance->USPAS.find(id) !=
-        topology.RPKIInstance->USPAS.end()) {
+    if (topology.RPKIInstance->USPAS.find(id) != topology.RPKIInstance->USPAS.end()) {
       objectCount++;
     }
   }
@@ -473,10 +461,8 @@ void ASPADeployment::deploy(Topology &topology) {
 
   // Calculate number of routers for each deployment
   size_t totalRouters = topology.G->nodes.size();
-  size_t objectCount =
-      static_cast<size_t>(totalRouters * objectPercentage_ / 100.0);
-  size_t policyCount =
-      static_cast<size_t>(totalRouters * policyPercentage_ / 100.0);
+  size_t objectCount = static_cast<size_t>(totalRouters * objectPercentage_ / 100.0);
+  size_t policyCount = static_cast<size_t>(totalRouters * policyPercentage_ / 100.0);
 
   auto objectRouters = topology.RandomSampleRouters(objectCount);
   auto policyRouters = topology.RandomSampleRouters(policyCount);

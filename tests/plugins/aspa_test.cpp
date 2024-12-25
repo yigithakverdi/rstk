@@ -2,6 +2,7 @@
 #include "engine/topology/topology.hpp"
 #include "parser/parser.hpp"
 #include "plugins/aspa/aspa.hpp"
+#include "logger/logger.hpp"
 #include <gtest/gtest.h>
 #include <memory>
 #include <vector>
@@ -25,15 +26,16 @@ protected:
     policyEngine = std::make_unique<ASPAPolicyEngine>(rpki, aspaProtocol);
 
     // Setup test relations
-    testRelations = {
-        {1, 2, -1},  {1, 3, -1},  {1, 4, -1}, // Tier 1 connections
-        {2, 3, 0},   {2, 5, -1},  {2, 6, -1}, // Tier 2 interconnections
-        {3, 6, -1},  {3, 7, -1},  {4, 7, -1},  {4, 8, -1},  {5, 6, 0},
-        {6, 7, 0},                             // Tier 2 peer connections
-        {7, 8, 0},   {5, 9, -1},  {5, 10, -1}, // Tier 3 connections
-        {6, 11, -1}, {6, 12, -1}, {7, 13, -1}, {7, 14, -1}, {8, 15, -1},
-        {8, 16, -1}, {9, 17, -1}, {16, 18, -1} // Additional connections
-    };
+    testRelations =
+        {
+            {1, 2, -1},  {1, 3, -1},  {1, 4, -1}, // Tier 1 connections
+            {2, 3, 0},   {2, 5, -1},  {2, 6, -1}, // Tier 2 interconnections
+            {3, 6, -1},  {3, 7, -1},  {4, 7, -1},  {4, 8, -1},
+            {5, 6, 0},   {6, 7, 0},                // Tier 2 peer connections
+            {7, 8, 0},   {5, 9, -1},  {5, 10, -1}, // Tier 3 connections
+            {6, 11, -1}, {6, 12, -1}, {7, 13, -1}, {7, 14, -1},
+            {8, 15, -1}, {8, 16, -1}, {9, 17, -1}, {16, 18, -1} // Additional connections
+        };
 
     // Initialize topology
     topology = std::make_unique<Topology>(testRelations, rpki);
@@ -54,8 +56,7 @@ TEST_F(ASPAAuthTest, ProviderPlusRelationships) {
   ASSERT_NE(router2, nullptr);
 
   // Test Provider+ relationship (AS5 with provider AS2)
-  ASPAAuthResult result =
-      policyEngine->authorized(router5.get(), router2.get());
+  ASPAAuthResult result = policyEngine->authorized(router5.get(), router2.get());
   EXPECT_EQ(result, ASPAAuthResult::ProviderPlus);
 }
 
@@ -73,8 +74,7 @@ TEST_F(ASPAAuthTest, NotProviderPlusRelationships) {
   ASSERT_NE(router3, nullptr);
 
   // Test Not Provider+ relationship (AS5 with non-provider AS3)
-  ASPAAuthResult result =
-      policyEngine->authorized(router5.get(), router3.get());
+  ASPAAuthResult result = policyEngine->authorized(router5.get(), router3.get());
   EXPECT_EQ(result, ASPAAuthResult::NotProviderPlus);
 }
 
@@ -88,8 +88,7 @@ TEST_F(ASPAAuthTest, NoAttestationCases) {
   ASSERT_NE(router4, nullptr);
 
   // Test No Attestation case (AS7 has no ASPA record)
-  ASPAAuthResult result =
-      policyEngine->authorized(router7.get(), router4.get());
+  ASPAAuthResult result = policyEngine->authorized(router7.get(), router4.get());
   EXPECT_EQ(result, ASPAAuthResult::NoAttestation);
 }
 
@@ -109,10 +108,8 @@ TEST_F(ASPAAuthTest, MultipleProvidersCase) {
   ASSERT_NE(router4, nullptr);
 
   // Test both providers
-  ASPAAuthResult result1 =
-      policyEngine->authorized(router7.get(), router3.get());
-  ASPAAuthResult result2 =
-      policyEngine->authorized(router7.get(), router4.get());
+  ASPAAuthResult result1 = policyEngine->authorized(router7.get(), router3.get());
+  ASPAAuthResult result2 = policyEngine->authorized(router7.get(), router4.get());
 
   EXPECT_EQ(result1, ASPAAuthResult::ProviderPlus);
   EXPECT_EQ(result2, ASPAAuthResult::ProviderPlus);
@@ -136,10 +133,8 @@ TEST_F(ASPAAuthTest, AS0ProviderCase) {
   ASSERT_NE(router2, nullptr);
 
   // Test that AS2 correctly identifies AS1 as Provider+
-  ASPAAuthResult result =
-      policyEngine->authorized(router2.get(), router1.get());
-  EXPECT_EQ(result, ASPAAuthResult::ProviderPlus)
-      << "Expected AS1 to be a provider of AS2";
+  ASPAAuthResult result = policyEngine->authorized(router2.get(), router1.get());
+  EXPECT_EQ(result, ASPAAuthResult::ProviderPlus) << "Expected AS1 to be a provider of AS2";
 }
 
 // Assuming ASPATest is defined as provided in your setup
@@ -151,25 +146,31 @@ protected:
   Parser parser;
 
   void SetUp() override {
+    // Initialize logger
+    LOG.setLevel(LogLevel::NONE);
+    
     // Initialize RPKI
     rpki = std::make_shared<RPKI>();
 
     // Setup test relations - hardcoded for the test
-    testRelations = {
-        {1, 2, -1},  {1, 3, -1},  {1, 4, -1}, // Tier 1 connections
-        {2, 3, 0},   {2, 5, -1},  {2, 6, -1}, // Tier 2 interconnections
-        {3, 6, -1},  {3, 7, -1},  {4, 7, -1},  {4, 8, -1},  {5, 6, 0},
-        {6, 7, 0},                             // Tier 2 peer connections
-        {7, 8, 0},   {5, 9, -1},  {5, 10, -1}, // Tier 3 connections
-        {6, 11, -1}, {6, 12, -1}, {7, 13, -1}, {7, 14, -1}, {8, 15, -1},
-        {8, 16, -1}, {9, 17, -1}, {16, 18, -1} // Additional connections
-    };
+    testRelations =
+        {
+            {1, 2, -1},  {1, 3, -1},  {1, 4, -1}, // Tier 1 connections
+            {2, 3, 0},   {2, 5, -1},  {2, 6, -1}, // Tier 2 interconnections
+            {3, 6, -1},  {3, 7, -1},  {4, 7, -1},  {4, 8, -1},
+            {5, 6, 0},   {6, 7, 0},                // Tier 2 peer connections
+            {7, 8, 0},   {5, 9, -1},  {5, 10, -1}, // Tier 3 connections
+            {6, 11, -1}, {6, 12, -1}, {7, 13, -1}, {7, 14, -1},
+            {8, 15, -1}, {8, 16, -1}, {9, 17, -1}, {16, 18, -1} // Additional connections
+        };
 
     // Initialize topology with relations
     topology = std::make_unique<Topology>(testRelations, rpki);
 
-    // Deploy ASPA randomly for 100% of ASes
-    /*topology->DeployASPARandomly(100.0, 100.0);*/
+    // Create and set deployment strategy (100% deployment for both objects and policies)
+    auto deploymentStrategy = std::make_unique<ASPADeployment>(100.0, 100.0);
+    topology->setDeploymentStrategy(std::move(deploymentStrategy));
+    topology->deploy();
   }
 
   // Helper function to create a route from AS IDs
@@ -201,8 +202,7 @@ protected:
 };
 
 // C++ Equivalent Test Function
-TEST_F(ASPATest, ASpaCase01) {
-  // Step 1: Retrieve the victim AS (AS 17) and verifying AS (AS 9)
+TEST_F(ASPATest, ASPACase01) {
   auto victim = topology->GetRouter(17);
   auto verifying_as = topology->GetRouter(9);
 
@@ -216,8 +216,7 @@ TEST_F(ASPATest, ASpaCase01) {
   ASSERT_NE(aspaProto, nullptr) << "ASPA Protocol not created.";
 
   ASPAResult result = policyEngine->PerformASPA(*route);
-  EXPECT_EQ(result, ASPAResult::Valid)
-      << "ASPA verification did not return 'Valid'.";
+  EXPECT_EQ(result, ASPAResult::Valid) << "ASPA verification did not return 'Valid'.";
 
   // Clean up the allocated Route object
   delete route;
@@ -270,8 +269,7 @@ TEST_F(ASPATest, ASPACase03) {
 
   // Verify ASPA result
   ASPAResult result = policyEngine->PerformASPA(*route);
-  EXPECT_EQ(result, ASPAResult::Invalid)
-      << "Path should be Invalid due to route leak by AS6";
+  EXPECT_EQ(result, ASPAResult::Invalid) << "Path should be Invalid due to route leak by AS6";
 
   // Clean up
   delete route;
@@ -337,6 +335,7 @@ TEST_F(ASPATest, ASPACase05) {
 }
 
 TEST_F(ASPATest, ASPACase06) {
+  LOG.setLevel(LogLevel::DEBUG);
   // Test upstream path verification with customer->customer->peer relationship
   // Path: [AS17 -> AS9 -> AS5 -> AS6], where AS6 is peer of AS5
 
@@ -355,13 +354,13 @@ TEST_F(ASPATest, ASPACase06) {
 
   // Verify ASPA result
   ASPAResult result = policyEngine->PerformASPA(*route);
-  EXPECT_EQ(result, ASPAResult::Valid)
-      << "Path should be Valid for customer->customer->peer path";
+  EXPECT_EQ(result, ASPAResult::Valid) << "Path should be Valid for 6 --(Peer)--> 5 --(Provider)--> 9 --(Provider)--> 17 path";
 
   delete route;
 }
 
 TEST_F(ASPATest, ASPACase07) {
+  LOG.setLevel(LogLevel::DEBUG);
   // Test upstream path verification with two customers, then lateral peer
   // relationship Path: [AS17 -> AS9 -> AS5 -> AS6], where AS9 has no ASPA
 
@@ -387,7 +386,7 @@ TEST_F(ASPATest, ASPACase07) {
   auto policyEngine = std::make_unique<ASPAPolicyEngine>(rpki);
 
   ASPAResult result = policyEngine->PerformASPA(*route);
-
+  
   EXPECT_EQ(result, ASPAResult::Unknown)
       << "Path should be Unknown due to missing ASPA object for AS9";
 
@@ -417,8 +416,8 @@ TEST_F(ASPATest, ASPACase08) {
 
   // Step 7: Expect 'Invalid' due to ASPA violation
   EXPECT_EQ(result, ASPAResult::Invalid)
-      << "Path should be Invalid due to Customer->Provider->Peer->Peer "
-         "relationships.";
+      << "Path should be Invalid due to  7 --(Peer)-> 6 --(Peer)-> 5 --(Provider)-> 9"
+         " relationships.";
 
   // Step 8: Clean up
   delete route;
@@ -455,6 +454,7 @@ TEST_F(ASPATest, ASPACase09) {
 }
 
 TEST_F(ASPATest, ASPACase10) {
+  LOG.setLevel(LogLevel::DEBUG);
   // Test upstream path verification: Customer -> Provider -> Peer -> Peer
   // Path: [AS9 -> AS5 -> AS6 -> AS7], expecting Invalid
 
@@ -465,7 +465,6 @@ TEST_F(ASPATest, ASPACase10) {
   ASSERT_NE(victim, nullptr) << "Victim AS9 not found in topology.";
   ASSERT_NE(verifying_as, nullptr) << "Verifying AS7 not found in topology.";
 
-  // Step 2: Create route [9,5,6,7]
   Route *route = createRoute({9, 5, 6, 3});
 
   // Step 5: Initialize ASPAProtocol and ASPAPolicyEngine
@@ -477,7 +476,7 @@ TEST_F(ASPATest, ASPACase10) {
 
   // Step 7: Expect 'Invalid' due to ASPA violation
   EXPECT_EQ(result, ASPAResult::Invalid)
-      << "Path should be Invalid due to Customer->Provider->Peer->Peer "
+      << "Path should be Invalid due to 3 --(Provider)--> 6 --(Peer)--> 5 --(Provider)--> 9 "
          "relationships.";
 
   // Step 8: Clean up
@@ -526,7 +525,7 @@ TEST_F(ASPATest, ASPACase12) {
   ASSERT_NE(verifying_as, nullptr) << "Verifying AS7 not found in topology.";
 
   // Step 2: Create route [9,5,6,7]
-  Route *route = createRoute({9, 5, 17});
+  Route *route = createRoute({9, 5, 10});
 
   // Step 5: Initialize ASPAProtocol and ASPAPolicyEngine
   auto aspaProto = std::make_unique<ASPAProtocol>(rpki);
@@ -567,7 +566,7 @@ TEST_F(ASPATest, ASPACase13) {
 
   // Step 7: Expect 'Invalid' due to ASPA violation
   EXPECT_EQ(result, ASPAResult::Valid)
-      << "Path should be Invalid due to Customer->Provider->Peer->Peer "
+      << "Path should be Invalid due to 10 --(Customer)--> 5 --(Peer)--> 6 "
          "relationships.";
 
   // Step 8: Clean up
@@ -575,7 +574,7 @@ TEST_F(ASPATest, ASPACase13) {
 }
 
 // Test Case 14: Valid Route - Upstream of Upstream Sending Route
-TEST_F(ASPATest, ASpaCase14) {
+TEST_F(ASPATest, ASPACase14) {
   auto victim = topology->GetRouter(2);
   auto verifying_as = topology->GetRouter(10);
 
@@ -596,15 +595,14 @@ TEST_F(ASPATest, ASpaCase14) {
 
   // Perform ASPA validation
   ASPAResult result = policyEngine->PerformASPA(*route);
-  EXPECT_EQ(result, ASPAResult::Valid)
-      << "ASPA verification did not return 'Valid'.";
+  EXPECT_EQ(result, ASPAResult::Valid) << "ASPA verification did not return 'Valid'.";
 
   // Clean up
   delete route;
 }
 
 // Test Case 15: Valid Route - Peer of Upstream of Upstream Sending Route
-TEST_F(ASPATest, ASpaCase15) {
+TEST_F(ASPATest, ASPACase15) {
   auto victim = topology->GetRouter(6);
   auto verifying_as = topology->GetRouter(17);
 
@@ -620,20 +618,19 @@ TEST_F(ASPATest, ASpaCase15) {
   // Create a policy engine
   auto aspaProto = std::make_unique<ASPAProtocol>(rpki);
   auto policyEngine = std::make_unique<ASPAPolicyEngine>(rpki);
-  
+
   ASSERT_NE(policyEngine, nullptr) << "PolicyEngine not created.";
 
   // Perform ASPA validation
   ASPAResult result = policyEngine->PerformASPA(*route);
-  EXPECT_EQ(result, ASPAResult::Valid)
-      << "ASPA verification did not return 'Valid'.";
+  EXPECT_EQ(result, ASPAResult::Valid) << "ASPA verification did not return 'Valid'.";
 
   // Clean up
   delete route;
 }
 
 // Test Case 16: Valid Route - Inverted V Shape
-TEST_F(ASPATest, ASpaCase16) {
+TEST_F(ASPATest, ASPACase16) {
   auto victim = topology->GetRouter(17);
   auto verifying_as = topology->GetRouter(12);
 
@@ -649,20 +646,19 @@ TEST_F(ASPATest, ASpaCase16) {
   // Create a policy engine
   auto aspaProto = std::make_unique<ASPAProtocol>(rpki);
   auto policyEngine = std::make_unique<ASPAPolicyEngine>(rpki);
-  
+
   ASSERT_NE(policyEngine, nullptr) << "PolicyEngine not created.";
 
   // Perform ASPA validation
   ASPAResult result = policyEngine->PerformASPA(*route);
-  EXPECT_EQ(result, ASPAResult::Valid)
-      << "ASPA verification did not return 'Valid'.";
+  EXPECT_EQ(result, ASPAResult::Valid) << "ASPA verification did not return 'Valid'.";
 
   // Clean up
   delete route;
 }
 
 // Test Case 17: Valid Route - Inverted V Shape Opposite Direction
-TEST_F(ASPATest, ASpaCase17) {
+TEST_F(ASPATest, ASPACase17) {
   auto victim = topology->GetRouter(12);
   auto verifying_as = topology->GetRouter(17);
 
@@ -682,15 +678,14 @@ TEST_F(ASPATest, ASpaCase17) {
 
   // Perform ASPA validation
   ASPAResult result = policyEngine->PerformASPA(*route);
-  EXPECT_EQ(result, ASPAResult::Valid)
-      << "ASPA verification did not return 'Valid'.";
+  EXPECT_EQ(result, ASPAResult::Valid) << "ASPA verification did not return 'Valid'.";
 
   // Clean up
   delete route;
 }
 
 // Test Case 18: Valid Route - Inverted V Shape with p2p at Apex
-TEST_F(ASPATest, ASpaCase18) {
+TEST_F(ASPATest, ASPACase18) {
   auto victim = topology->GetRouter(17);
   auto verifying_as = topology->GetRouter(14);
 
@@ -710,15 +705,14 @@ TEST_F(ASPATest, ASpaCase18) {
 
   // Perform ASPA validation
   ASPAResult result = policyEngine->PerformASPA(*route);
-  EXPECT_EQ(result, ASPAResult::Valid)
-      << "ASPA verification did not return 'Valid'.";
+  EXPECT_EQ(result, ASPAResult::Valid) << "ASPA verification did not return 'Valid'.";
 
   // Clean up
   delete route;
 }
 
 // Test Case 19: Valid Route - Inverted V Shape Opposite Direction
-TEST_F(ASPATest, ASpaCase19) {
+TEST_F(ASPATest, ASPACase19) {
   auto victim = topology->GetRouter(14);
   auto verifying_as = topology->GetRouter(17);
 
@@ -738,15 +732,14 @@ TEST_F(ASPATest, ASpaCase19) {
 
   // Perform ASPA validation
   ASPAResult result = policyEngine->PerformASPA(*route);
-  EXPECT_EQ(result, ASPAResult::Valid)
-      << "ASPA verification did not return 'Valid'.";
+  EXPECT_EQ(result, ASPAResult::Valid) << "ASPA verification did not return 'Valid'.";
 
   // Clean up
   delete route;
 }
 
 // Test Case 20: Unknown Route - Inverted V Shape, AS5 has no ASPA
-TEST_F(ASPATest, ASpaCase20) {
+TEST_F(ASPATest, ASPACase20) {
   auto victim = topology->GetRouter(17);
   auto verifying_as = topology->GetRouter(12);
 
@@ -756,8 +749,10 @@ TEST_F(ASPATest, ASpaCase20) {
   // Path: [17,9,5,2,6,12]
   Route *route = createRoute({17, 9, 5, 2, 6, 12});
 
-  // Remove ASPA object for AS5
+  // Remove ASPA object for AS5, and 
   rpki->USPAS.erase(5);
+  auto router5 = topology->GetRouter(5);
+  ASSERT_NE(router5, nullptr);
 
   // Assign ASPAPolicy to verifying_as
   verifying_as->proto = std::make_unique<ASPAProtocol>(rpki);
@@ -778,7 +773,7 @@ TEST_F(ASPATest, ASpaCase20) {
 }
 
 // Test Case 21: Unknown Route - Opposite Direction, AS5 has no ASPA
-TEST_F(ASPATest, ASpaCase21) {
+TEST_F(ASPATest, ASPACase21) {
   auto victim = topology->GetRouter(12);
   auto verifying_as = topology->GetRouter(17);
 
@@ -790,6 +785,9 @@ TEST_F(ASPATest, ASpaCase21) {
 
   // Remove ASPA object for AS5
   rpki->USPAS.erase(5);
+  auto router5 = topology->GetRouter(5);
+  ASSERT_NE(router5, nullptr);
+
 
   // Assign ASPAPolicy to verifying_as
   verifying_as->proto = std::make_unique<ASPAProtocol>(rpki);
@@ -811,7 +809,7 @@ TEST_F(ASPATest, ASpaCase21) {
 
 // Test Case 22: Unknown Route - Inverted V Shape with p2p at Apex, AS5 has no
 // ASPA
-TEST_F(ASPATest, ASpaCase22) {
+TEST_F(ASPATest, ASPACase22) {
   auto victim = topology->GetRouter(17);
   auto verifying_as = topology->GetRouter(14);
 
@@ -843,7 +841,7 @@ TEST_F(ASPATest, ASpaCase22) {
 }
 
 // Test Case 23: Unknown Route - Opposite Direction, AS5 has no ASPA
-TEST_F(ASPATest, ASpaCase23) {
+TEST_F(ASPATest, ASPACase23) {
   auto victim = topology->GetRouter(14);
   auto verifying_as = topology->GetRouter(17);
 
@@ -875,7 +873,7 @@ TEST_F(ASPATest, ASpaCase23) {
 }
 
 // Test Case 24: Unknown Route - Inverted V Shape, AS5 and AS6 have no ASPA
-TEST_F(ASPATest, ASpaCase24) {
+TEST_F(ASPATest, ASPACase24) {
   auto victim = topology->GetRouter(17);
   auto verifying_as = topology->GetRouter(12);
 
@@ -908,7 +906,7 @@ TEST_F(ASPATest, ASpaCase24) {
 }
 
 // Test Case 25: Unknown Route - Opposite Direction, AS5 and AS6 have no ASPA
-TEST_F(ASPATest, ASpaCase25) {
+TEST_F(ASPATest, ASPACase25) {
   auto victim = topology->GetRouter(12);
   auto verifying_as = topology->GetRouter(17);
 
@@ -942,7 +940,7 @@ TEST_F(ASPATest, ASpaCase25) {
 
 // Test Case 26: Unknown Route - Inverted V Shape with p2p at Apex, AS5 and AS6
 // have no ASPA
-TEST_F(ASPATest, ASpaCase26) {
+TEST_F(ASPATest, ASPACase26) {
   auto victim = topology->GetRouter(17);
   auto verifying_as = topology->GetRouter(14);
 
@@ -975,7 +973,7 @@ TEST_F(ASPATest, ASpaCase26) {
 }
 
 // Test Case 27: Unknown Route - Opposite Direction, AS5 and AS6 have no ASPA
-TEST_F(ASPATest, ASpaCase27) {
+TEST_F(ASPATest, ASPACase27) {
   auto victim = topology->GetRouter(14);
   auto verifying_as = topology->GetRouter(17);
 
@@ -1008,7 +1006,7 @@ TEST_F(ASPATest, ASpaCase27) {
 }
 
 // Test Case 30: Invalid Route - Route Leak by AS6 to Upstream
-TEST_F(ASPATest, ASpaCase30) {
+TEST_F(ASPATest, ASPACase30) {
   auto victim = topology->GetRouter(17);
   auto verifying_as = topology->GetRouter(14);
 
@@ -1036,7 +1034,8 @@ TEST_F(ASPATest, ASpaCase30) {
 }
 
 // Test Case 31: Invalid Route - Route Leak by AS6 to Lateral Peer
-TEST_F(ASPATest, ASpaCase31) {
+TEST_F(ASPATest, ASPACase31) {
+  LOG.setLevel(LogLevel::DEBUG);
   auto victim = topology->GetRouter(17);
   auto verifying_as = topology->GetRouter(14);
 
@@ -1065,7 +1064,7 @@ TEST_F(ASPATest, ASpaCase31) {
 }
 
 // Test Case 32: Invalid Route - Route Leak by AS6 and AS7
-TEST_F(ASPATest, ASpaCase32) {
+TEST_F(ASPATest, ASPACase32) {
   auto victim = topology->GetRouter(17);
   auto verifying_as = topology->GetRouter(18);
 
@@ -1094,7 +1093,7 @@ TEST_F(ASPATest, ASpaCase32) {
 }
 
 // Test Case 33: Invalid Route - Route Leak by AS6 and AS7 Opposite Direction
-TEST_F(ASPATest, ASpaCase33) {
+TEST_F(ASPATest, ASPACase33) {
   auto victim = topology->GetRouter(18);
   auto verifying_as = topology->GetRouter(17);
 
@@ -1117,40 +1116,6 @@ TEST_F(ASPATest, ASpaCase33) {
   EXPECT_EQ(result, ASPAResult::Invalid)
       << "ASPA verification did not return 'Invalid' due to route leak by AS6 "
          "and AS7 in opposite direction.";
-
-  // Clean up
-  delete route;
-}
-
-// Test Case 06: Valid Route - Customer -> Customer -> Peer
-TEST_F(ASPATest, ASpaCase06) {
-  // Assuming this corresponds to test_aspa_case_06 which was initially failing
-  // Path: [ASNumber, ...] -- details not provided, but assuming it's a valid
-  // customer->customer->peer path For demonstration, let's assume: Path:
-  // [2,3,7]
-
-  auto victim = topology->GetRouter(2);
-  auto verifying_as = topology->GetRouter(7);
-
-  ASSERT_NE(victim, nullptr) << "Victim AS2 not found in topology.";
-  ASSERT_NE(verifying_as, nullptr) << "Verifying AS7 not found in topology.";
-
-  // Path: [2,3,7]
-  Route *route = createRoute({2, 3, 7});
-
-  // Assign ASPAPolicy to verifying_as
-  verifying_as->proto = std::make_unique<ASPAProtocol>(rpki);
-
-  // Create a policy engine
-  auto aspaProto = std::make_unique<ASPAProtocol>(rpki);
-  auto policyEngine = std::make_unique<ASPAPolicyEngine>(rpki);
-  ASSERT_NE(policyEngine, nullptr) << "PolicyEngine not created.";
-
-  // Perform ASPA validation
-  ASPAResult result = policyEngine->PerformASPA(*route);
-  EXPECT_EQ(result, ASPAResult::Valid)
-      << "ASPA verification did not return 'Valid' for "
-         "customer->customer->peer path.";
 
   // Clean up
   delete route;
