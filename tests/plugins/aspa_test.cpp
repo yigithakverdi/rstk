@@ -7,136 +7,6 @@
 #include <memory>
 #include <vector>
 
-class ASPAAuthTest : public ::testing::Test {
-protected:
-  std::shared_ptr<RPKI> rpki;
-  std::shared_ptr<ASPAProtocol> aspaProtocol;
-  std::unique_ptr<ASPAPolicyEngine> policyEngine;
-  std::unique_ptr<Topology> topology;
-  std::vector<AsRel> testRelations;
-
-  void SetUp() override {
-    // Initialize RPKI
-    rpki = std::make_shared<RPKI>();
-
-    // Initialize ASPA Protocol
-    aspaProtocol = std::make_shared<ASPAProtocol>(rpki);
-
-    // Initialize Policy Engine with RPKI and ASPA Protocol
-    policyEngine = std::make_unique<ASPAPolicyEngine>(rpki, aspaProtocol);
-
-    // Setup test relations
-    testRelations =
-        {
-            {1, 2, -1},  {1, 3, -1},  {1, 4, -1}, // Tier 1 connections
-            {2, 3, 0},   {2, 5, -1},  {2, 6, -1}, // Tier 2 interconnections
-            {3, 6, -1},  {3, 7, -1},  {4, 7, -1},  {4, 8, -1},
-            {5, 6, 0},   {6, 7, 0},                // Tier 2 peer connections
-            {7, 8, 0},   {5, 9, -1},  {5, 10, -1}, // Tier 3 connections
-            {6, 11, -1}, {6, 12, -1}, {7, 13, -1}, {7, 14, -1},
-            {8, 15, -1}, {8, 16, -1}, {9, 17, -1}, {16, 18, -1} // Additional connections
-        };
-
-    // Initialize topology
-    topology = std::make_unique<Topology>(testRelations, rpki);
-  }
-};
-
-// Test Provider+ cases
-TEST_F(ASPAAuthTest, ProviderPlusRelationships) {
-  // Create ASPA object for AS5 with AS2 as provider
-  std::vector<int> as5_providers = {2};
-  ASPAObject as5_aspa(5, as5_providers, std::vector<unsigned char>());
-  rpki->USPAS[5] = as5_aspa;
-
-  auto router5 = topology->GetRouter(5);
-  auto router2 = topology->GetRouter(2);
-
-  ASSERT_NE(router5, nullptr);
-  ASSERT_NE(router2, nullptr);
-
-  // Test Provider+ relationship (AS5 with provider AS2)
-  ASPAAuthResult result = policyEngine->authorized(router5.get(), router2.get());
-  EXPECT_EQ(result, ASPAAuthResult::ProviderPlus);
-}
-
-// Test Not Provider+ cases
-TEST_F(ASPAAuthTest, NotProviderPlusRelationships) {
-  // Create ASPA object for AS5 with AS2 as only provider
-  std::vector<int> as5_providers = {2};
-  ASPAObject as5_aspa(5, as5_providers, std::vector<unsigned char>());
-  rpki->USPAS[5] = as5_aspa;
-
-  auto router5 = topology->GetRouter(5);
-  auto router3 = topology->GetRouter(3); // AS3 is not in AS5's provider list
-
-  ASSERT_NE(router5, nullptr);
-  ASSERT_NE(router3, nullptr);
-
-  // Test Not Provider+ relationship (AS5 with non-provider AS3)
-  ASPAAuthResult result = policyEngine->authorized(router5.get(), router3.get());
-  EXPECT_EQ(result, ASPAAuthResult::NotProviderPlus);
-}
-
-// Test No Attestation cases
-TEST_F(ASPAAuthTest, NoAttestationCases) {
-  // Don't create any ASPA objects for AS7
-  auto router7 = topology->GetRouter(7);
-  auto router4 = topology->GetRouter(4);
-
-  ASSERT_NE(router7, nullptr);
-  ASSERT_NE(router4, nullptr);
-
-  // Test No Attestation case (AS7 has no ASPA record)
-  ASPAAuthResult result = policyEngine->authorized(router7.get(), router4.get());
-  EXPECT_EQ(result, ASPAAuthResult::NoAttestation);
-}
-
-// Test multiple providers case
-TEST_F(ASPAAuthTest, MultipleProvidersCase) {
-  // Create ASPA object for AS7 with multiple providers
-  std::vector<int> as7_providers = {3, 4};
-  ASPAObject as7_aspa(7, as7_providers, std::vector<unsigned char>());
-  rpki->USPAS[7] = as7_aspa;
-
-  auto router7 = topology->GetRouter(7);
-  auto router3 = topology->GetRouter(3);
-  auto router4 = topology->GetRouter(4);
-
-  ASSERT_NE(router7, nullptr);
-  ASSERT_NE(router3, nullptr);
-  ASSERT_NE(router4, nullptr);
-
-  // Test both providers
-  ASPAAuthResult result1 = policyEngine->authorized(router7.get(), router3.get());
-  ASPAAuthResult result2 = policyEngine->authorized(router7.get(), router4.get());
-
-  EXPECT_EQ(result1, ASPAAuthResult::ProviderPlus);
-  EXPECT_EQ(result2, ASPAAuthResult::ProviderPlus);
-}
-
-// Test AS0 provider case
-TEST_F(ASPAAuthTest, AS0ProviderCase) {
-  // First clear any existing ASPA objects
-  rpki->USPAS.clear();
-
-  // Create ASPA object for AS2 with AS0 and AS1 as providers (since AS1 is
-  // provider of AS2)
-  std::vector<int> as2_providers = {0, 1};
-  ASPAObject as2_aspa(2, as2_providers, std::vector<unsigned char>());
-  rpki->USPAS[2] = as2_aspa;
-
-  auto router1 = topology->GetRouter(1);
-  auto router2 = topology->GetRouter(2);
-
-  ASSERT_NE(router1, nullptr);
-  ASSERT_NE(router2, nullptr);
-
-  // Test that AS2 correctly identifies AS1 as Provider+
-  ASPAAuthResult result = policyEngine->authorized(router2.get(), router1.get());
-  EXPECT_EQ(result, ASPAAuthResult::ProviderPlus) << "Expected AS1 to be a provider of AS2";
-}
-
 // Assuming ASPATest is defined as provided in your setup
 class ASPATest : public ::testing::Test {
 protected:
@@ -785,8 +655,13 @@ TEST_F(ASPATest, ASPACase21) {
 
   // Remove ASPA object for AS5
   rpki->USPAS.erase(5);
+
   auto router5 = topology->GetRouter(5);
   ASSERT_NE(router5, nullptr);
+
+  if (auto aspaProto = dynamic_cast<ASPAProtocol *>(router5->proto.get())) {
+    aspaProto->clearASPAObjects();
+  }
 
 
   // Assign ASPAPolicy to verifying_as
@@ -853,6 +728,14 @@ TEST_F(ASPATest, ASPACase23) {
 
   // Remove ASPA object for AS5
   rpki->USPAS.erase(5);
+
+  auto router5 = topology->GetRouter(5);
+  ASSERT_NE(router5, nullptr);
+
+  if (auto aspaProto = dynamic_cast<ASPAProtocol *>(router5->proto.get())) {
+    aspaProto->clearASPAObjects();
+  }
+
 
   // Assign ASPAPolicy to verifying_as
   verifying_as->proto = std::make_unique<ASPAProtocol>(rpki);
@@ -986,6 +869,19 @@ TEST_F(ASPATest, ASPACase27) {
   // Remove ASPA objects for AS5 and AS6
   rpki->USPAS.erase(5);
   rpki->USPAS.erase(6);
+
+  auto router5 = topology->GetRouter(5);
+  auto router6 = topology->GetRouter(6);
+  ASSERT_NE(router5, nullptr);
+  ASSERT_NE(router6, nullptr);
+
+  if (auto aspaProto = dynamic_cast<ASPAProtocol *>(router5->proto.get())) {
+    aspaProto->clearASPAObjects();
+  }
+  if (auto aspaProto = dynamic_cast<ASPAProtocol *>(router6->proto.get())) {
+    aspaProto->clearASPAObjects();
+  }
+
 
   // Assign ASPAPolicy to verifying_as
   verifying_as->proto = std::make_unique<ASPAProtocol>(rpki);

@@ -31,10 +31,10 @@ public:
 
   bool shouldAcceptRoute(const Route &route) const override;
   bool shouldPreferRoute(const Route &currentRoute, const Route &newRoute) const override;
-  ASPAResult performASPAVerification(const Route &route) const;
   ASPAResult PerformASPA(const Route &route) const;
-  ASPAAuthResult authorized(Router *currAS, Router *nextAS) const;
-
+  bool HasASPARecord(Router *as) const;
+  bool IsProviderPlus(Router *as, Router *provider) const;
+  
 private:
   std::shared_ptr<RPKI> rpki_;
   std::vector<ASPAObject> aspaObjects_;
@@ -44,11 +44,6 @@ private:
   int asPathLength(const Route &route) const;
   int nextHopASNumber(const Route &route) const;
   bool canForwardRoute(Relation sourceRelation, Relation targetRelation) const override;
-  ASPAResult upstreamPathVerification(const Route &route) const;
-  ASPAResult downstreamPathVerification(const Route &route) const;
-
-  std::pair<int, int> computeUpRamp(const Route &route) const;
-  std::pair<int, int> computeDownRamp(const Route &route) const;
 };
 
 class ASPAProtocol : public Protocol, public std::enable_shared_from_this<ASPAProtocol> {
