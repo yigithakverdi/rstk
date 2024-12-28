@@ -166,7 +166,6 @@ double RouteHijackExperiment::runTrial(const Trial &trial) {
 
   return calculateAttackerSuccessRate(trial.attacker, trial.victim);
 }
-
 void RouteHijackExperiment::run() {
   const double step = 10.0;
   size_t matrix_size = static_cast<size_t>(100 / step) + 1;
@@ -186,6 +185,8 @@ void RouteHijackExperiment::run() {
       double matrix_progress = (static_cast<double>(current_config) / total_configs) * 100;
       display.updateMatrixProgress(matrix_progress, obj_pct, pol_pct);
 
+      // Capture the number of trials before popping from the queue
+      size_t total_trials_for_this_config = input_queue_.size();
       size_t trial_count = 0;
       std::vector<double> trial_results;
 
@@ -197,13 +198,13 @@ void RouteHijackExperiment::run() {
         double result = runTrial(trial);
         trial_results.push_back(result);
 
-        // Update trial progress
-        double trial_progress = (static_cast<double>(trial_count) / input_queue_.size()) * 100;
+        // Use total_trials_for_this_config instead of input_queue_.size()
+        double trial_progress =
+            (static_cast<double>(trial_count) / total_trials_for_this_config) * 100.0;
         display.updateTrialProgress(trial_progress, result, trial.victim->ASNumber,
                                     trial.attacker->ASNumber);
       }
 
-      // Calculate and store average
       double avg = !trial_results.empty()
                        ? std::accumulate(trial_results.begin(), trial_results.end(), 0.0) /
                              trial_results.size()
@@ -219,7 +220,7 @@ void RouteHijackExperiment::run() {
 
   std::string filename = "hijack_matrix_" + deploymentType_ + ".csv";
   std::ofstream out(filename);
-  for (const auto &row : results) { // Now results is a member variable
+  for (const auto &row : results) {
     for (size_t i = 0; i < row.size(); i++) {
       out << row[i];
       if (i < row.size() - 1)

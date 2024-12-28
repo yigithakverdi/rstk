@@ -124,6 +124,7 @@ private:
 // Add this helper class
 class ProgressDisplay {
 public:
+
   void updateMatrixProgress(double progress, double obj_pct, double pol_pct) {
     // Save cursor position
     std::cout << "\033[s";
