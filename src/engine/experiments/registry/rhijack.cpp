@@ -166,6 +166,7 @@ double RouteHijackExperiment::runTrial(const Trial &trial) {
 
   return calculateAttackerSuccessRate(trial.attacker, trial.victim);
 }
+
 void RouteHijackExperiment::run() {
   const double step = 10.0;
   size_t matrix_size = static_cast<size_t>(100 / step) + 1;
