@@ -3,9 +3,8 @@
 #define EXPERIMENT_REGISTRY_HPP
 
 #include "engine/experiments/experiments.hpp"
-#include "engine/experiments/registry/raspa.hpp"
-#include "engine/experiments/registry/rcaida.hpp"
 #include "engine/experiments/registry/rhijack.hpp"
+#include "engine/experiments/registry/rleak.hpp"
 #include <functional>
 #include <memory>
 #include <string>
@@ -90,30 +89,26 @@ private:
   createExperiment(std::queue<Trial> &input, std::queue<double> &output,
                    std::shared_ptr<Topology> topology, const std::vector<std::string> &args) {
 
-    if constexpr (std::is_same_v<T, RouteHijackExperiment>) {
+    if constexpr (std::is_same_v<T, RouteHijackExperiment>) { // Add this branch
       if (args.size() < 1) {
-        throw std::runtime_error("RouteHijackExperiment requires n_hops parameter");
-      }
-      int n_hops = std::stoi(args[0]);
-      return std::make_unique<RouteHijackExperiment>(input, output, topology, n_hops);
-    } else if constexpr (std::is_same_v<T, ASPADeploymentExperiment>) {
-      if (args.size() < 2) {
-        throw std::runtime_error("ASPADeploymentExperiment requires object and "
-                                 "policy deployment percentages");
-      }
-      double obj_pct = std::stod(args[0]);
-      double pol_pct = std::stod(args[1]);
-      return std::make_unique<ASPADeploymentExperiment>(input, output, topology, obj_pct, pol_pct);
-    } else if constexpr (std::is_same_v<T, CAIDAExperiment>) { // Add this branch
-      if (args.size() < 2) {
         throw std::runtime_error(
-            "CAIDAExperiment requires object and policy deployment percentages");
+            "RouteHijackExperiment requires deployment strategy <selective|random>");
       }
-      double obj_pct = std::stod(args[0]);
-      double pol_pct = std::stod(args[1]);
-      return std::make_unique<CAIDAExperiment>(input, output, topology, obj_pct, pol_pct);
+      std::string deploymentType = args[0];
+      return std::make_unique<RouteHijackExperiment>(input, output, topology, deploymentType);
+    } else if (std::is_same_v<T, RouteLeakExperiment>) {
+      if (args.size() < 1) {
+        throw std::runtime_error(
+          "RouteLeakExperiment requires deployment strategy <selective|random>");
+      }
+      std::string deploymentType = args[0];
+      return std::make_unique<RouteLeakExperiment>(input, output, topology, deploymentType);
     }
+
     // Add more experiment types here
+    // ...
+    // ...
+
     else {
       throw std::runtime_error("Unknown experiment type");
     }
@@ -127,17 +122,12 @@ private:
 
 // Function to initialize all experiments
 inline void initializeExperiments() {
-  REGISTER_EXPERIMENT(RouteHijackExperiment, "route-hijack", "Simulates route hijacking attacks",
-                      "n_hops: Number of hops in attack path");
-
-  REGISTER_EXPERIMENT(ASPADeploymentExperiment, "aspa-deployment",
-                      "Tests ASPA deployment strategies",
-                      "object_deployment: Percentage of ASPA objects to deploy",
-                      "policy_deployment: Percentage of ASPA policies to deploy");
-
-  REGISTER_EXPERIMENT(CAIDAExperiment, "caida", "Simulates ASPA deployment using CAIDA data",
-                      "object_deployment: Percentage of ASPA objects to deploy",
-                      "policy_deployment: Percentage of ASPA policies to deploy");
+  REGISTER_EXPERIMENT(RouteHijackExperiment, "route-hijack",
+                      "Simulates ASPA deployment using CAIDA data",
+                      "deployment_type: Type of deployment <random|selective>");
+  REGISTER_EXPERIMENT(RouteLeakExperiment, "route-leak",
+                      "Simulates route leak scenario on different percentages of ASPA",
+                      "deployment_type: Type of deployment <random|selective");
 }
 
 #endif // EXPERIMENT_REGISTRY_HPP

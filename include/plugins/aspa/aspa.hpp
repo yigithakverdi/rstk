@@ -34,7 +34,7 @@ public:
   ASPAResult PerformASPA(const Route &route) const;
   bool HasASPARecord(Router *as) const;
   bool IsProviderPlus(Router *as, Router *provider) const;
-  
+
 private:
   std::shared_ptr<RPKI> rpki_;
   std::vector<ASPAObject> aspaObjects_;
@@ -91,9 +91,9 @@ private:
   std::vector<ASPAObject> aspaSet_;
 };
 
-class ASPADeployment : public DeploymentStrategy {
+class RandomDeployment : public DeploymentStrategy {
 public:
-  ASPADeployment(double objectPercentage, double policyPercentage)
+  RandomDeployment(double objectPercentage, double policyPercentage)
       : objectPercentage_(objectPercentage), policyPercentage_(policyPercentage) {}
 
   void deploy(Topology &topology) override;
@@ -103,6 +103,26 @@ public:
 private:
   double objectPercentage_;
   double policyPercentage_;
+};
+
+class SelectiveDeployment : public DeploymentStrategy {
+public:
+  SelectiveDeployment(double objectPercentage, double policyPercentage)
+      : objectPercentage_(objectPercentage), policyPercentage_(policyPercentage) {}
+
+  void deploy(Topology &topology) override;
+  void clear(Topology &topology) override;
+  bool validate(const Topology &topology) const override;
+
+private:
+  double objectPercentage_;
+  double policyPercentage_;
+
+  void addTierToTargets(const std::vector<std::shared_ptr<Router>> &tier, size_t remainingCount,
+                        std::vector<std::shared_ptr<Router>> &targets) {
+    size_t toAdd = std::min(tier.size(), remainingCount);
+    targets.insert(targets.end(), tier.begin(), tier.begin() + toAdd);
+  }
 };
 
 #endif // ASPA_HPP

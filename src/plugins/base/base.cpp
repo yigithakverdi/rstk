@@ -11,16 +11,13 @@ bool BasePolicyEngine::shouldAcceptRoute(const Route &route) const {
   return true;
 }
 
-std::vector<std::function<int(const Route &)>>
-BasePolicyEngine::getPreferenceRules() const {
-  return {
-      [this](const Route &route) { return calculateLocalPreference(route); },
-      [this](const Route &route) { return calculateASPathLength(route); },
-      [this](const Route &route) { return getNextHopASNumber(route); }};
+std::vector<std::function<int(const Route &)>> BasePolicyEngine::getPreferenceRules() const {
+  return {[this](const Route &route) { return calculateLocalPreference(route); },
+          [this](const Route &route) { return calculateASPathLength(route); },
+          [this](const Route &route) { return getNextHopASNumber(route); }};
 }
 
-bool BasePolicyEngine::shouldPreferRoute(const Route &currentRoute,
-                                         const Route &newRoute) const {
+bool BasePolicyEngine::shouldPreferRoute(const Route &currentRoute, const Route &newRoute) const {
   if (currentRoute.destination != newRoute.destination) {
     return false;
   }
@@ -42,15 +39,12 @@ bool BasePolicyEngine::shouldPreferRoute(const Route &currentRoute,
   return false;
 }
 
-bool BasePolicyEngine::canForwardRoute(Relation sourceRelation,
-                                       Relation targetRelation) const {
+bool BasePolicyEngine::canForwardRoute(Relation sourceRelation, Relation targetRelation) const {
   if (sourceRelation == Relation::Customer) {
-    return targetRelation == Relation::Provider ||
-           targetRelation == Relation::Peer;
+    return true;
   }
 
-  if (sourceRelation == Relation::Peer ||
-      sourceRelation == Relation::Provider) {
+  if (sourceRelation == Relation::Peer || sourceRelation == Relation::Provider) {
     return targetRelation == Relation::Customer;
   }
 
@@ -89,16 +83,13 @@ int BasePolicyEngine::getNextHopASNumber(const Route &route) const {
 
 BaseProtocol::BaseProtocol() : Protocol(std::make_unique<BasePolicyEngine>()) {}
 
-std::string BaseProtocol::getProtocolName() const {
-  return "Base Protocol Implementation";
-}
+std::string BaseProtocol::getProtocolName() const { return "Base Protocol Implementation"; }
 
 void BaseDeploymentStrategy::deploy(Topology &topology) {
   clear(topology);
 
   for (const auto &[id, router] : topology.G->nodes) {
-    if (!router->proto ||
-        router->proto->getProtocolName() != "Base Protocol Implementation") {
+    if (!router->proto || router->proto->getProtocolName() != "Base Protocol Implementation") {
       router->proto = std::make_unique<BaseProtocol>();
     }
   }
@@ -111,19 +102,15 @@ void BaseDeploymentStrategy::clear(Topology &topology) {
   }
 }
 
-std::string BaseProtocol::getDetailedProtocolInfo() const {
-  return getProtocolInfo();
-}
+std::string BaseProtocol::getDetailedProtocolInfo() const { return getProtocolInfo(); }
 
-std::pair<int, int>
-BaseProtocol::getDeploymentStats(const Topology &topology) const {
+std::pair<int, int> BaseProtocol::getDeploymentStats(const Topology &topology) const {
   return {0, 0};
 }
 
 bool BaseDeploymentStrategy::validate(const Topology &topology) const {
   for (const auto &[id, router] : topology.G->nodes) {
-    if (!router->proto ||
-        router->proto->getProtocolName() != "Base Protocol Implementation") {
+    if (!router->proto || router->proto->getProtocolName() != "Base Protocol Implementation") {
       return false;
     }
   }

@@ -8,6 +8,7 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <iomanip>
 
 /**
  * A simple progress bar for long-running tasks.
@@ -118,4 +119,62 @@ private:
   std::mutex display_mutex_;
   std::atomic<bool> running_{false};
   std::unique_ptr<std::thread> refresh_thread_;
+};
+
+// Add this helper class
+class ProgressDisplay {
+public:
+  void updateMatrixProgress(double progress, double obj_pct, double pol_pct) {
+    // Save cursor position
+    std::cout << "\033[s";
+
+    // Move to start of line and clear
+    std::cout << "\033[G\033[K";
+
+    // Draw matrix progress bar
+    std::cout << "Matrix Progress [";
+    int width = 30;
+    int pos = static_cast<int>(width * (progress / 100.0));
+
+    for (int i = 0; i < width; ++i) {
+      if (i < pos)
+        std::cout << "█";
+      else if (i == pos)
+        std::cout << "▓";
+      else
+        std::cout << "░";
+    }
+
+    std::cout << "] " << std::fixed << std::setprecision(1) << progress << "% "
+              << "(Object: " << obj_pct << "%, Policy: " << pol_pct << "%)";
+
+    // Restore cursor position
+    std::cout << "\033[u" << std::flush;
+  }
+
+  void updateTrialProgress(double progress, double result, int victim_as, int attacker_as) {
+    std::cout << "\033[s";       // Save position
+    std::cout << "\033[1B";      // Move down one line
+    std::cout << "\033[G\033[K"; // Clear line
+
+    // Draw trial progress
+    std::cout << "Trial Progress  [";
+    int width = 30;
+    int pos = static_cast<int>(width * (progress / 100.0));
+
+    for (int i = 0; i < width; ++i) {
+      if (i < pos)
+        std::cout << "█";
+      else if (i == pos)
+        std::cout << "▓";
+      else
+        std::cout << "░";
+    }
+
+    std::cout << "] " << std::fixed << std::setprecision(1) << progress << "% "
+              << "| Success Rate: " << result * 100 << "% "
+              << "| Victim AS" << victim_as << " -> Attacker AS" << attacker_as;
+
+    std::cout << "\033[u" << std::flush; // Restore position
+  }
 };

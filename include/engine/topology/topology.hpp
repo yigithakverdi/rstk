@@ -38,11 +38,13 @@ public:
   void setDeploymentStrategy(std::unique_ptr<DeploymentStrategy> strategy);
   void deploy();
   void clearDeployment();
+  void clearRoutingTables();
 
   std::vector<std::shared_ptr<Router>> RandomSampleRouters(size_t count) const;
   std::vector<std::shared_ptr<Router>> GetTierOne() const;
   std::vector<std::shared_ptr<Router>> GetTierTwo() const;
   std::vector<std::shared_ptr<Router>> GetTierThree() const;
+  std::vector<std::shared_ptr<Router>> GetByCustomerDegree() const;
   std::shared_ptr<Router> GetRouter(int routerHash) const;
   std::vector<Router *> RandomSampleExcluding(int count, Router *attacker);
   std::string TopologyName;

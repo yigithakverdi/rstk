@@ -38,7 +38,7 @@ protected:
     topology = std::make_unique<Topology>(testRelations, rpki);
 
     // Create and set deployment strategy (100% deployment for both objects and policies)
-    auto deploymentStrategy = std::make_unique<ASPADeployment>(100.0, 100.0);
+    auto deploymentStrategy = std::make_unique<RandomDeployment>(100.0, 100.0);
     topology->setDeploymentStrategy(std::move(deploymentStrategy));
     topology->deploy();
   }

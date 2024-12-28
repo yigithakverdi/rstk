@@ -24,15 +24,15 @@ public:
   virtual ~ExperimentWorker() = default;
 
   void stop();
-  void run();
 
-  double calculateAttackerSuccess(std::shared_ptr<Router> attacker, std::shared_ptr<Router> victim);
+  virtual void run();
   virtual size_t calculateTotalTrials() const = 0;
+  virtual double runTrial(const Trial &trial) = 0;
+
   std::queue<Trial> &input_queue_;
   std::queue<double> &output_queue_;
 
 protected:
-  virtual double runTrial(const Trial &trial) = 0;
   virtual void initializeTrial() = 0;
   virtual bool setupTopology() { return (topology_ != nullptr); }
 

@@ -4,7 +4,6 @@
 #include "router/router.hpp"
 #include <chrono>
 #include <memory>
-#include <thread>
 
 ExperimentProgress::ExperimentProgress(size_t total)
     : total_(total), start_time_(std::chrono::steady_clock::now()) {}
@@ -49,34 +48,7 @@ ExperimentWorker::ExperimentWorker(std::queue<Trial> &input_queue, std::queue<do
 
 void ExperimentWorker::stop() { stopped_ = true; }
 
+// In ExperimentWorker::run()
 void ExperimentWorker::run() {
-  std::cout << "Initializing trials..." << std::endl;
-  initializeTrial();
-
-  size_t totalTrials = input_queue_.size();
-  ExperimentProgress progress(totalTrials);
-
-  int trialCount = 0;
-  while (!stopped_ && !input_queue_.empty()) {
-    Trial trial = input_queue_.front();
-    input_queue_.pop();
-
-    progress.update(++trialCount);
-    output_queue_.push(runTrial(trial));
-
-    std::cout << "\r" << std::string(80, ' ') << "\r";
-    std::cout << "\rProgress: [" << progress.getBar() << "] " << trialCount << "/" << totalTrials
-              << " (ETA: " << progress.estimateTimeRemaining() << ")" << std::flush;
-  }
-  std::cout << std::endl;
-
-  // Add this to notify completion
-  auto &engine = Engine::Instance();
-  engine.updateExperimentProgress(totalTrials);
-  engine.setState(EngineState::INITIALIZED); // Reset state after completion
-}
-
-double ExperimentWorker::calculateAttackerSuccess(std::shared_ptr<Router> attacker,
-                                                  std::shared_ptr<Router> victim) {
-  return 0.0;
+  std::cout << "Run not set, you need to overload it under specific experiment class" << std::endl;
 }

@@ -10,10 +10,8 @@
 class BasePolicyEngine : public PolicyEngine {
 public:
   bool shouldAcceptRoute(const Route &route) const override;
-  bool shouldPreferRoute(const Route &currentRoute,
-                         const Route &newRoute) const override;
-  bool canForwardRoute(Relation sourceRelation,
-                       Relation targetRelation) const override;
+  bool shouldPreferRoute(const Route &currentRoute, const Route &newRoute) const override;
+  bool canForwardRoute(Relation sourceRelation, Relation targetRelation) const override;
 
 protected:
   virtual int calculateLocalPreference(const Route &route) const;
@@ -31,8 +29,7 @@ public:
   std::string getProtocolName() const override;
   std::string getProtocolInfo() const override { return "Base BGP Protocol\n"; }
   std::string getDetailedProtocolInfo() const override;
-  std::pair<int, int>
-  getDeploymentStats(const Topology &topology) const override;
+  std::pair<int, int> getDeploymentStats(const Topology &topology) const override;
 };
 
 class BaseDeploymentStrategy : public DeploymentStrategy {

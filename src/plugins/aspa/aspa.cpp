@@ -1,9 +1,9 @@
 #include "plugins/aspa/aspa.hpp"
 #include "engine/rpki/rpki.hpp"
+#include "logger/logger.hpp"
 #include "router/relation.hpp"
 #include "router/route.hpp"
 #include "router/router.hpp"
-#include "logger/logger.hpp"
 
 ASPAObject::ASPAObject(int customerAS, const std::vector<int> &providerASes,
                        const std::vector<unsigned char> &signature)
@@ -133,86 +133,88 @@ ASPAObject ASPAProtocol::getASPAObject(Router *customerAS) const {
 std::string ASPAProtocol::getProtocolName() const { return "ASPA"; }
 
 ASPAResult ASPAPolicyEngine::PerformASPA(const Route &route) const {
-    if (route.path.size() < 2) {
-        throw std::runtime_error("Route length below verifiable!");
+  if (route.path.size() < 2) {
+    throw std::runtime_error("Route length below verifiable!");
+  }
+
+  Router *final = route.path.back();
+  Router *firstHop = route.path[route.path.size() - 2];
+  Relation relation = final->GetRelation(firstHop);
+
+  // Customer/Peer path validation
+  if (relation == Relation::Customer || relation == Relation::Peer) {
+    if (route.path.size() == 2)
+      return ASPAResult::Valid;
+
+    // Check all ASPA records exist first
+    for (size_t i = 0; i < route.path.size() - 2; i++) {
+      if (!HasASPARecord(route.path[i])) {
+        return ASPAResult::Unknown;
+      }
     }
 
-    Router *final = route.path.back();
-    Router *firstHop = route.path[route.path.size() - 2];
-    Relation relation = final->GetRelation(firstHop);
+    // Validate provider relationships
+    for (size_t i = 0; i < route.path.size() - 2; i++) {
+      if (!IsProviderPlus(route.path[i], route.path[i + 1])) {
+        return ASPAResult::Invalid;
+      }
+    }
+    return ASPAResult::Valid;
+  }
 
-    // Customer/Peer path validation
-    if (relation == Relation::Customer || relation == Relation::Peer) {
-        if (route.path.size() == 2) return ASPAResult::Valid;
+  // Provider path validation
+  if (relation == Relation::Provider) {
+    if (route.path.size() <= 3)
+      return ASPAResult::Valid;
 
-        // Check all ASPA records exist first
-        for (size_t i = 0; i < route.path.size() - 2; i++) {
-            if (!HasASPARecord(route.path[i])) {
-                return ASPAResult::Unknown;
-            }
-        }
-
-        // Validate provider relationships
-        for (size_t i = 0; i < route.path.size() - 2; i++) {
-            if (!IsProviderPlus(route.path[i], route.path[i + 1])) {
-                return ASPAResult::Invalid;
-            }
-        }
-        return ASPAResult::Valid;
+    // Check all ASPA records exist first
+    for (size_t i = 0; i < route.path.size() - 2; i++) {
+      if (!HasASPARecord(route.path[i])) {
+        return ASPAResult::Unknown;
+      }
     }
 
-    // Provider path validation
-    if (relation == Relation::Provider) {
-        if (route.path.size() <= 3) return ASPAResult::Valid;
+    // Find invalid hops
+    size_t u_min = route.path.size();
+    size_t v_max = 0;
 
-        // Check all ASPA records exist first
-        for (size_t i = 0; i < route.path.size() - 2; i++) {
-            if (!HasASPARecord(route.path[i])) {
-                return ASPAResult::Unknown;
-            }
-        }
-
-        // Find invalid hops
-        size_t u_min = route.path.size();
-        size_t v_max = 0;
-
-        for (size_t i = 0; i < route.path.size() - 2; i++) {
-            if (!IsProviderPlus(route.path[i], route.path[i + 1])) {
-                u_min = i + 2;
-                break;
-            }
-        }
-
-        for (size_t i = route.path.size() - 2; i > 0; i--) {
-            if (!IsProviderPlus(route.path[i], route.path[i - 1])) {
-                v_max = i;
-                break;
-            }
-        }
-
-        if (u_min <= v_max) {
-            return ASPAResult::Invalid;
-        }
-
-        return ASPAResult::Valid;
+    for (size_t i = 0; i < route.path.size() - 2; i++) {
+      if (!IsProviderPlus(route.path[i], route.path[i + 1])) {
+        u_min = i + 2;
+        break;
+      }
     }
 
-    return ASPAResult::Invalid;
+    for (size_t i = route.path.size() - 2; i > 0; i--) {
+      if (!IsProviderPlus(route.path[i], route.path[i - 1])) {
+        v_max = i;
+        break;
+      }
+    }
+
+    if (u_min <= v_max) {
+      return ASPAResult::Invalid;
+    }
+
+    return ASPAResult::Valid;
+  }
+
+  return ASPAResult::Invalid;
 }
 
 // Helper methods
-bool ASPAPolicyEngine::HasASPARecord(Router* as) const {
-    return rpki_->USPAS.find(as->ASNumber) != rpki_->USPAS.end();
+bool ASPAPolicyEngine::HasASPARecord(Router *as) const {
+  return rpki_->USPAS.find(as->ASNumber) != rpki_->USPAS.end();
 }
 
-bool ASPAPolicyEngine::IsProviderPlus(Router* as, Router* provider) const {
-    auto uspasIt = rpki_->USPAS.find(as->ASNumber);
-    if (uspasIt == rpki_->USPAS.end()) {
-        return false;
-    }
+bool ASPAPolicyEngine::IsProviderPlus(Router *as, Router *provider) const {
+  auto uspasIt = rpki_->USPAS.find(as->ASNumber);
+  if (uspasIt == rpki_->USPAS.end()) {
+    return false;
+  }
 
-    const auto& providers = uspasIt->second.providerASes;
-    return std::find(providers.begin(), providers.end(), provider->ASNumber) != providers.end();
+  const auto &providers = uspasIt->second.providerASes;
+  return std::find(providers.begin(), providers.end(), provider->ASNumber) != providers.end();
 }
 
 std::string ASPAProtocol::getProtocolInfo() const {
@@ -247,7 +249,7 @@ std::pair<int, int> ASPAProtocol::getDeploymentStats(const Topology &topology) c
 
 void ASPAProtocol::clearASPAObjects() { aspaSet_.clear(); }
 
-void ASPADeployment::deploy(Topology &topology) {
+void RandomDeployment::deploy(Topology &topology) {
   // Clear any existing deployment first
   clear(topology);
 
@@ -277,7 +279,7 @@ void ASPADeployment::deploy(Topology &topology) {
   }
 }
 
-void ASPADeployment::clear(Topology &topology) {
+void RandomDeployment::clear(Topology &topology) {
   for (const auto &[id, router] : topology.G->nodes) {
     if (auto aspaProto = dynamic_cast<ASPAProtocol *>(router->proto.get())) {
       aspaProto->clearASPAObjects();
@@ -288,7 +290,57 @@ void ASPADeployment::clear(Topology &topology) {
   topology.RPKIInstance->USPAS.clear();
 }
 
-bool ASPADeployment::validate(const Topology &topology) const {
+bool RandomDeployment::validate(const Topology &topology) const {
   // Validation logic
   return true;
+}
+
+void SelectiveDeployment::clear(Topology &topology) {
+  for (const auto &[id, router] : topology.G->nodes) {
+    if (auto aspaProto = dynamic_cast<ASPAProtocol *>(router->proto.get())) {
+      aspaProto->clearASPAObjects();
+    }
+  }
+  topology.RPKIInstance->USPAS.clear();
+}
+
+bool SelectiveDeployment::validate(const Topology &topology) const { return true; }
+
+void SelectiveDeployment::deploy(Topology &topology) {
+  // Clear any existing deployment
+  clear(topology);
+
+  // Get routers sorted by customer degree (descending order)
+  auto routersByCustomerDegree = topology.GetByCustomerDegree();
+
+  // Calculate total deployment counts
+  size_t totalRouters = topology.G->nodes.size();
+  size_t totalObjectCount = static_cast<size_t>(totalRouters * objectPercentage_ / 100.0);
+  size_t totalPolicyCount = static_cast<size_t>(totalRouters * policyPercentage_ / 100.0);
+
+  // Select routers for deployment based on customer degree
+  std::vector<std::shared_ptr<Router>> objectTargets(
+      routersByCustomerDegree.begin(),
+      routersByCustomerDegree.begin() + std::min(totalObjectCount, routersByCustomerDegree.size()));
+
+  std::vector<std::shared_ptr<Router>> policyTargets(
+      routersByCustomerDegree.begin(),
+      routersByCustomerDegree.begin() + std::min(totalPolicyCount, routersByCustomerDegree.size()));
+
+  // Deploy ASPA protocols and objects to selected routers
+  for (const auto &router : policyTargets) {
+    router->proto = std::make_unique<ASPAProtocol>(topology.RPKIInstance);
+    if (auto aspaProto = dynamic_cast<ASPAProtocol *>(router->proto.get())) {
+      ASPAObject obj = ASPAProtocol::createObjectForRouter(router);
+      aspaProto->addASPAObject(obj);
+      aspaProto->updateUSPAS();
+    }
+  }
+
+  // Create ASPA objects for non-ASPA routers
+  for (const auto &router : objectTargets) {
+    if (!dynamic_cast<ASPAProtocol *>(router->proto.get())) {
+      ASPAProtocol::createObjectInRPKI(router, topology.RPKIInstance);
+    }
+  }
 }

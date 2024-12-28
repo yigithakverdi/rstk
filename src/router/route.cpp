@@ -30,29 +30,50 @@ void Route::ReversePath() { std::reverse(path.begin(), path.end()); }
 
 std::string Route::ToString() const {
   std::stringstream ss;
-  ss << "Route to AS" << (destination ? std::to_string(destination->ASNumber) : "None");
-  ss << " Path: [";
+  ss << "\n  Destination: AS" << (destination ? std::to_string(destination->ASNumber) : "None");
 
-  for (size_t i = 0; i < path.size(); ++i) {
+  // Path information
+  ss << "\n  Path: [";
+  // Iterate in reverse to show forward path
+  for (int i = path.size() - 1; i >= 0; --i) {
     if (path[i]) {
       ss << "AS" << path[i]->ASNumber;
-      if (i < path.size() - 1) {
-        ss << " -> ";
+      // Show relationship between consecutive ASes
+      if (i > 0 && path[i - 1]) {                         // Changed condition to check previous AS
+        Relation rel = path[i]->GetRelation(path[i - 1]); // Get relation to previous AS
+        ss << " -(" << relationToString(rel) << ")-> ";
       }
     } else {
       ss << "None";
-      if (i < path.size() - 1) {
-        ss << " -> ";
-      }
     }
   }
   ss << "]";
 
-  ss << " Flags: {";
-  ss << "authenticated=" << (authenticated ? "true" : "false");
-  ss << ", originValid=" << (originValid ? "true" : "false");
-  ss << ", pathEndInvalid=" << (pathEndInvalid ? "true" : "false");
-  ss << "}";
+  // Protocol validation flags
+  ss << "\n  Protocol Status:";
+  ss << "\n    - Authenticated: " << (authenticated ? "✓" : "✗");
+  ss << "\n    - Origin Valid: " << (originValid ? "✓" : "✗");
+  ss << "\n    - Path End Valid: " << (!pathEndInvalid ? "✓" : "✗");
+
+  // Check for valley-free violations
+  bool hasValleyViolation = false;
+  std::string violationDetails;
+  for (size_t i = 0; i < path.size() - 1; i++) {
+    if (path[i] && path[i + 1]) {
+      Relation rel = path[i]->GetRelation(path[i + 1]);
+      if (rel == Relation::Provider && i > 0) {
+        hasValleyViolation = true;
+        violationDetails +=
+            "\n      - Customer-to-Provider transition after index " + std::to_string(i);
+      }
+    }
+  }
+
+  if (hasValleyViolation) {
+    ss << "\n  Valley-Free Violations:" << violationDetails;
+  } else {
+    ss << "\n  Valley-Free: ✓ Valid";
+  }
 
   return ss.str();
 }

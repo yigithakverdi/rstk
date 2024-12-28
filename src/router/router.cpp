@@ -8,10 +8,13 @@
 #include "router/router.hpp"
 #include "sstream"
 
-Router::Router() : ASNumber(0), Tier(0), proto(ProtocolFactory::Instance().CreateProtocol(ASNumber)), rpki(nullptr) {}
+Router::Router()
+    : ASNumber(0), Tier(0), proto(ProtocolFactory::Instance().CreateProtocol(ASNumber)),
+      rpki(nullptr) {}
 
 Router::Router(int ASNumber)
-    : ASNumber(ASNumber), Tier(0), proto(ProtocolFactory::Instance().CreateProtocol(ASNumber)), rpki(nullptr) {}
+    : ASNumber(ASNumber), Tier(0), proto(ProtocolFactory::Instance().CreateProtocol(ASNumber)),
+      rpki(nullptr) {}
 
 Relation Router::GetRelation(Router *router) {
   for (const auto &[asNum, neighbor] : neighbors_) {
@@ -66,11 +69,17 @@ std::string Router::toString() const {
       Route *route = routePair.second;
       oss << "  - Destination AS" << destinationAS << ": ";
       if (route) {
-        oss << "Path: ";
-        for (const auto &hop : route->path) {
-          oss << "AS" << hop->ASNumber << " -> ";
+        oss << "Path: [";
+        // Iterate in reverse to show forward path
+        for (int i = route->path.size() - 1; i >= 0; --i) {
+          oss << "AS" << route->path[i]->ASNumber;
+          // Show relationship between consecutive ASes
+          if (i > 0) {
+            Relation rel = route->path[i]->GetRelation(route->path[i - 1]);
+            oss << " -(" << relationToString(rel) << ")-> ";
+          }
         }
-        oss << "\n";
+        oss << "]\n";
       } else {
         oss << "Invalid Route\n";
       }
@@ -114,8 +123,8 @@ std::vector<Router *> Router::LearnRoute(Route *route, VerbosityLevel verbosity)
           status = "🟢 Valid hop";
         }
       }
-      std::cout << "│  " << (i == route->path.size() - 1 ? "└" : "├") << "─ AS" << hop->ASNumber << " ("
-                << (i == 0 ? "Origin" : "Transit") << ") " << status << "\n";
+      std::cout << "│  " << (i == route->path.size() - 1 ? "└" : "├") << "─ AS" << hop->ASNumber
+                << " (" << (i == 0 ? "Origin" : "Transit") << ") " << status << "\n";
     }
   }
 

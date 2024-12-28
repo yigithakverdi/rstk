@@ -345,4 +345,31 @@ void registerAllCommands(CLI &cli) {
 
                                     return interactiveRouterExplorer(topology, current_router);
                                   }});
+  cli.registerCommand("router",
+                      {"router",
+                       "Display detailed information about a specific router",
+                       {"router <AS-number>"},
+                       [](const std::vector<std::string> &args, CLIState &state) {
+                         if (args.empty()) {
+                           throw std::runtime_error("AS number required");
+                         }
+
+                         auto topology = state.getEngine().getTopology();
+                         if (!topology) {
+                           throw std::runtime_error("No topology loaded");
+                         }
+
+                         try {
+                           int asNumber = std::stoi(args[0]);
+                           auto router = topology->GetRouter(asNumber);
+                           if (!router) {
+                             throw std::runtime_error("Router AS" + args[0] + " not found");
+                           }
+
+                           return CommandResult(router->toString());
+
+                         } catch (const std::invalid_argument &) {
+                           throw std::runtime_error("Invalid AS number format");
+                         }
+                       }});
 }

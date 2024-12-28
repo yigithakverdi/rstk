@@ -21,13 +21,15 @@ Topology::Topology(const std::vector<AsRel> &asRelsList, std::shared_ptr<RPKI> r
 
   for (const AsRel &asRel : asRelsList) {
     if (G->nodes.find(asRel.AS1) == G->nodes.end()) {
-      auto source = std::make_shared<Router>(asRel.AS1, 1, std::make_unique<BaseProtocol>(), RPKIInstance);
+      auto source =
+          std::make_shared<Router>(asRel.AS1, 1, std::make_unique<BaseProtocol>(), RPKIInstance);
       G->addNode(asRel.AS1, source);
     } else {
     }
 
     if (G->nodes.find(asRel.AS2) == G->nodes.end()) {
-      auto target = std::make_shared<Router>(asRel.AS2, 1, std::make_unique<BaseProtocol>(), RPKIInstance);
+      auto target =
+          std::make_shared<Router>(asRel.AS2, 1, std::make_unique<BaseProtocol>(), RPKIInstance);
       G->addNode(asRel.AS2, target);
     } else {
     }
@@ -39,7 +41,8 @@ Topology::Topology(const std::vector<AsRel> &asRelsList, std::shared_ptr<RPKI> r
       G->addEdge(asRel.AS1, asRel.AS2, weight);
       G->addEdge(asRel.AS2, asRel.AS1, weight);
     } catch (const std::invalid_argument &e) {
-      std::cerr << "Error adding edge between " << asRel.AS1 << " and " << asRel.AS2 << ": " << e.what() << std::endl;
+      std::cerr << "Error adding edge between " << asRel.AS1 << " and " << asRel.AS2 << ": "
+                << e.what() << std::endl;
     }
 
     assignNeighbors(asRel);
@@ -73,6 +76,38 @@ void Topology::clearDeployment() {
     deploymentStrategy_->clear(*this);
   }
   deployment_applied_ = false;
+}
+
+void Topology::clearRoutingTables() {
+  for (const auto &[id, router] : G->nodes) {
+    router->Clear();
+  }
+}
+
+std::vector<std::shared_ptr<Router>> Topology::GetByCustomerDegree() const {
+  // Create vector of routers with their customer counts
+  std::vector<std::pair<std::shared_ptr<Router>, size_t>> routerCustomerCounts;
+
+  // For each router, count its customers
+  for (const auto &[id, router] : G->nodes) {
+    size_t customerCount = router->GetCustomers().size();
+    routerCustomerCounts.emplace_back(router, customerCount);
+  }
+
+  // Sort routers by customer count in descending order
+  std::sort(routerCustomerCounts.begin(), routerCustomerCounts.end(),
+            [](const auto &a, const auto &b) {
+              return a.second > b.second; // Descending order
+            });
+
+  // Extract just the routers in sorted order
+  std::vector<std::shared_ptr<Router>> sortedRouters;
+  sortedRouters.reserve(routerCustomerCounts.size());
+  for (const auto &[router, count] : routerCustomerCounts) {
+    sortedRouters.push_back(router);
+  }
+
+  return sortedRouters;
 }
 
 std::vector<std::shared_ptr<Router>> Topology::GetTierOne() const {
@@ -164,6 +199,11 @@ void Topology::FindRoutesTo(Router *target, VerbosityLevel verbosity) {
     for (Router *neighbor : neighbors) {
       Route *newRoute = finalRouter->ForwardRoute(route, neighbor);
       if (newRoute) {
+        if (verbosity >= VerbosityLevel::NORMAL) {
+          std::cout << "📍 AS" << finalRouter->ASNumber << " announcing route to AS"
+                    << neighbor->ASNumber << " ("
+                    << relationToString(finalRouter->GetRelation(neighbor)) << ")\n";
+        }
         routes.push_back(newRoute);
       }
     }
@@ -190,7 +230,8 @@ void Topology::assignTiers() {
   }
 }
 
-void Topology::Hijack(Router *victim, Router *attacker, int numberOfHops, VerbosityLevel verbosity) {
+void Topology::Hijack(Router *victim, Router *attacker, int numberOfHops,
+                      VerbosityLevel verbosity) {
   ValidateDeployment();
 
   if (verbosity >= VerbosityLevel::NORMAL) {
