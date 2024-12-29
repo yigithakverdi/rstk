@@ -3,6 +3,7 @@
 
 #include "engine/experiments/experiments.hpp"
 #include "engine/topology/topology.hpp"
+#include "cli/ui.hpp"
 #include <memory>
 #include <queue>
 
@@ -30,6 +31,11 @@ private:
   int victimAS_;
   int attackerAS_;
   int attackerHops_;
+
+  std::vector<std::vector<double>> results;
+  std::unique_ptr<ProgressDisplay> display;
+  size_t matrix_size;
+
 };
 
 #endif // RCAIDA_HPP

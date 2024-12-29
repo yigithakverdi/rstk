@@ -19,6 +19,11 @@ RouteLeakExperiment::RouteLeakExperiment(std::queue<Trial> &input_queue,
     : ExperimentWorker(input_queue, output_queue, nullptr), // Notice we pass nullptr here
       deploymentType_(deploymentType) {
   // Set the attacker hops to 1 by default
+  const double step = 10.0;
+  matrix_size = static_cast<size_t>(100 / step) + 1;
+  results = std::vector<std::vector<double>>(matrix_size, std::vector<double>(matrix_size, 0.0));
+  display = std::make_unique<ProgressDisplay>();
+
 
   // Load the CAIDA topology during construction
   if (!setupTopology()) {
@@ -104,11 +109,6 @@ void RouteLeakExperiment::initializeTrial() {
     throw std::runtime_error("Not enough routers in topology for trials");
   }
 
-  // Create and start the spinner for visual feedback
-  Spinner spinner;
-  spinner.start();
-  std::cout << "\nSampling " << numberOfTrials << " trials...\n";
-
   try {
     for (int i = 0; i < numberOfTrials; ++i) {
       // Sample two distinct routers
@@ -116,7 +116,6 @@ void RouteLeakExperiment::initializeTrial() {
 
       // In rare cases, sampling might return fewer routers
       if (sampledRouters.size() < 2) {
-        spinner.stop();
         throw std::runtime_error("Failed to sample enough routers for trial " +
                                  std::to_string(i + 1));
       }
@@ -128,13 +127,8 @@ void RouteLeakExperiment::initializeTrial() {
       input_queue_.push(t);
     }
   } catch (const std::exception &e) {
-    spinner.stop();
     throw; // Re-throw the exception after stopping the spinner
   }
-
-  // Stop the spinner after sampling is complete
-  spinner.stop();
-  std::cout << "Sampled " << numberOfTrials << " trials successfully.\n";
 }
 
 bool RouteLeakExperiment::setupTopology() {
@@ -219,62 +213,58 @@ double RouteLeakExperiment::runTrial(const Trial &trial) {
 }
 
 void RouteLeakExperiment::run() {
-  // Matrix size based on 10% steps (can be made configurable if needed)
   const double step = 10.0;
   size_t matrix_size = static_cast<size_t>(100 / step) + 1;
-  std::vector<std::vector<double>> results(matrix_size, std::vector<double>(matrix_size, 0.0));
+  size_t total_configs = matrix_size * matrix_size;
+  size_t current_config = 0;
 
-  std::cout << "Starting deployment study...\n";
-  ExperimentProgress progress(matrix_size * matrix_size);
-  int configCount = 0;
+  // Initialize progress displays
+  ProgressDisplay display;
 
   for (double obj_pct = 0; obj_pct <= 100; obj_pct += step) {
     for (double pol_pct = 0; pol_pct <= 100; pol_pct += step) {
-      // Set deployment percentages for this configuration
       objectDeployment_ = obj_pct;
       policyDeployment_ = pol_pct;
+      current_config++;
 
-      // Clear queues for new configuration
-      while (!input_queue_.empty())
-        input_queue_.pop();
-      while (!output_queue_.empty())
-        output_queue_.pop();
+      // Update matrix progress
+      double matrix_progress = (static_cast<double>(current_config) / total_configs) * 100;
+      display.updateMatrixProgress(matrix_progress, obj_pct, pol_pct);
 
-      // Run trials for this configuration
-      initializeTrial();
+      // Capture the number of trials before popping from the queue
+      size_t total_trials_for_this_config = input_queue_.size();
+      size_t trial_count = 0;
       std::vector<double> trial_results;
 
       while (!input_queue_.empty() && !stopped_) {
         Trial trial = input_queue_.front();
         input_queue_.pop();
+        trial_count++;
+
         double result = runTrial(trial);
         trial_results.push_back(result);
+
+        // Use total_trials_for_this_config instead of input_queue_.size()
+        double trial_progress =
+            (static_cast<double>(trial_count) / total_trials_for_this_config) * 100.0;
+        display.updateTrialProgress(trial_progress, result, trial.victim->ASNumber,
+                                    trial.attacker->ASNumber);
       }
 
-      // Calculate average success rate
       double avg = !trial_results.empty()
                        ? std::accumulate(trial_results.begin(), trial_results.end(), 0.0) /
                              trial_results.size()
                        : 0.0;
 
-      // Store result
       size_t i = static_cast<size_t>(obj_pct / step);
       size_t j = static_cast<size_t>(pol_pct / step);
       results[i][j] = avg;
 
-      // Update progress display
-      progress.update(++configCount);
-      std::cout << "\033[3A\r" << std::string(80, ' ') << "\r"
-                << "Progress: [" << progress.getBar() << "] " << configCount << "/"
-                << (matrix_size * matrix_size) << " (ETA: " << progress.estimateTimeRemaining()
-                << ")\n"
-                << "Testing " << obj_pct << "% objects, " << pol_pct << "% policy: " << avg
-                << "% success\n\n";
+      initializeTrial();
     }
   }
 
-  // Save results to CSV
-  std::string filename = "leak_matrix_" + deploymentType_ + ".csv";
+  std::string filename = "hijack_matrix_" + deploymentType_ + ".csv";
   std::ofstream out(filename);
   for (const auto &row : results) {
     for (size_t i = 0; i < row.size(); i++) {
@@ -289,3 +279,4 @@ void RouteLeakExperiment::run() {
   engine.updateExperimentProgress(matrix_size * matrix_size);
   engine.setState(EngineState::INITIALIZED);
 }
+
