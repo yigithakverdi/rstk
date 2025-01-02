@@ -5,6 +5,12 @@
 
 Route::Route() : destination(nullptr), path() {}
 
+struct PathSegment {
+  Router *from;
+  Router *to;
+  Relation relation;
+};
+
 // If a rounter contains cycle return ture else return false, a router
 // contains cycle when there is duplicate router in the path
 bool Route::ContainsCycle() const {
@@ -34,13 +40,13 @@ std::string Route::ToString() const {
 
   // Path information
   ss << "\n  Path: [";
-  // Iterate in reverse to show forward path
-  for (int i = path.size() - 1; i >= 0; --i) {
+  // Iterate normally to show forward path
+  for (size_t i = 0; i < path.size(); ++i) {
     if (path[i]) {
       ss << "AS" << path[i]->ASNumber;
       // Show relationship between consecutive ASes
-      if (i > 0 && path[i - 1]) {                         // Changed condition to check previous AS
-        Relation rel = path[i]->GetRelation(path[i - 1]); // Get relation to previous AS
+      if (i < path.size() - 1 && path[i + 1]) {           // Changed condition to check next AS
+        Relation rel = path[i]->GetRelation(path[i + 1]); // Get relation to next AS
         ss << " -(" << relationToString(rel) << ")-> ";
       }
     } else {
@@ -55,16 +61,46 @@ std::string Route::ToString() const {
   ss << "\n    - Origin Valid: " << (originValid ? "✓" : "✗");
   ss << "\n    - Path End Valid: " << (!pathEndInvalid ? "✓" : "✗");
 
-  // Check for valley-free violations
   bool hasValleyViolation = false;
   std::string violationDetails;
+
+  // First get the path segments for easier analysis
+  std::vector<PathSegment> segments;
   for (size_t i = 0; i < path.size() - 1; i++) {
     if (path[i] && path[i + 1]) {
-      Relation rel = path[i]->GetRelation(path[i + 1]);
-      if (rel == Relation::Provider && i > 0) {
+      segments.push_back({path[i], path[i + 1], path[i]->GetRelation(path[i + 1])});
+    }
+  }
+
+  // For each segment, check if traffic propagation follows valley-free rules
+  for (size_t i = 0; i < segments.size(); i++) {
+    if (i == 0)
+      continue; // Skip first segment (originating AS)
+
+    // Get current and previous relations
+    Relation prevRelation = segments[i - 1].relation;
+    Relation currentRelation = segments[i].relation;
+
+    // Rule 1: If received from customer, can go anywhere
+    if (prevRelation == Relation::Customer) {
+      continue; // Always valid
+    }
+
+    // Rule 2: If received from peer, must go to customer
+    else if (prevRelation == Relation::Peer) {
+      if (currentRelation != Relation::Customer) {
         hasValleyViolation = true;
-        violationDetails +=
-            "\n      - Customer-to-Provider transition after index " + std::to_string(i);
+        violationDetails += "\n      - Peer traffic sent to non-customer at AS" +
+                            std::to_string(segments[i].from->ASNumber);
+      }
+    }
+
+    // Rule 3: If received from provider, must go to customer
+    else if (prevRelation == Relation::Provider) {
+      if (currentRelation != Relation::Customer) {
+        hasValleyViolation = true;
+        violationDetails += "\n      - Provider traffic sent to non-customer at AS" +
+                            std::to_string(segments[i].from->ASNumber);
       }
     }
   }
@@ -75,5 +111,25 @@ std::string Route::ToString() const {
     ss << "\n  Valley-Free: ✓ Valid";
   }
 
+  return ss.str();
+}
+
+std::string Route::PathToString() const {
+  std::stringstream ss;
+  ss << "Path: [";
+  // Iterate normally to show forward path
+  for (size_t i = 0; i < path.size(); ++i) {
+    if (path[i]) {
+      ss << "AS" << path[i]->ASNumber;
+      // Show relationship between consecutive ASes
+      if (i < path.size() - 1 && path[i + 1]) {           // Check next AS
+        Relation rel = path[i]->GetRelation(path[i + 1]); // Get relation to next AS
+        ss << " -(" << relationToString(rel) << ")-> ";
+      }
+    } else {
+      ss << "None";
+    }
+  }
+  ss << "]";
   return ss.str();
 }

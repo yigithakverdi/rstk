@@ -174,7 +174,7 @@ public:
 
     std::cout << "] " << std::fixed << std::setprecision(1) << progress << "% "
               << "| Success Rate: " << result * 100 << "% "
-              << "| Victim AS" << victim_as << " -> Attacker AS" << attacker_as;
+              << "| Victim AS" << victim_as << " / Attacker (Leaking) AS" << attacker_as;
 
     std::cout << "\033[u" << std::flush; // Restore position
   }

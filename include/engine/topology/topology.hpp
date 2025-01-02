@@ -48,11 +48,11 @@ public:
   std::shared_ptr<Router> GetRouter(int routerHash) const;
   std::vector<Router *> RandomSampleExcluding(int count, Router *attacker);
   std::string TopologyName;
+  std::unique_ptr<DeploymentStrategy> deploymentStrategy_;
 
 private:
   Relation inverseRelation(Relation rel) const;
   bool deployment_applied_ = false;
-  std::unique_ptr<DeploymentStrategy> deploymentStrategy_;
 
 public:
   std::unique_ptr<Graph<std::shared_ptr<Router>>> G;

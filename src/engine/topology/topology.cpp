@@ -4,6 +4,7 @@
 #include "graph/graph.hpp"
 #include "logger/verbosity.hpp"
 #include "plugins/base/base.hpp"
+#include "plugins/leak/leak.hpp"
 #include "router/route.hpp"
 #include "router/router.hpp"
 #include <algorithm>
@@ -49,6 +50,12 @@ Topology::Topology(const std::vector<AsRel> &asRelsList, std::shared_ptr<RPKI> r
   }
 
   assignTiers();
+
+  // For testing purposes assign AS6 leaking protocol instead of base protocol
+  auto router6 = G->nodes[6];
+  /*auto router7 = G->nodes[7];*/
+  router6->proto = std::make_unique<LeakProtocol>();
+  /*router7->proto = std::make_unique<LeakProtocol>();*/
 }
 
 Topology::~Topology() {}
@@ -154,24 +161,47 @@ std::vector<std::shared_ptr<Router>> Topology::RandomSampleRouters(size_t count)
   return std::vector<std::shared_ptr<Router>>(allRouters.begin(), allRouters.begin() + count);
 }
 
+// Helper function to check if a route contains relationships violating Gao-Rexford model
+Router *findLeakedRoute(const Route &route) {
+  // Skip if route has less than 3 nodes (need origin, intermediate, and destination)
+  if (route.path.size() < 3) {
+    return nullptr;
+  }
+
+  // Check each AS except origin and destination
+  for (size_t i = 1; i < route.path.size() - 1; i++) {
+    Router *current_as = route.path[i];
+    Router *previous_as = route.path[i - 1];
+    Router *next_as = route.path[i + 1];
+
+    // Get relationships
+    Relation prev_relation = current_as->GetRelation(previous_as);
+    Relation next_relation = current_as->GetRelation(next_as);
+
+    // Peer sends route to other peer or upstream
+    if (prev_relation == Relation::Peer &&
+        (next_relation == Relation::Peer || next_relation == Relation::Provider)) {
+      std::cout << "Route leak detected at AS" << current_as->ASNumber << "(1)\n";
+      std::cout << route.ToString() << "\n";
+      throw std::runtime_error("Route leak detected");
+      return current_as; // Return offending AS
+    }
+    // Downstream sends route to other peer or upstream
+    else if (prev_relation == Relation::Provider &&
+             (next_relation == Relation::Peer || next_relation == Relation::Provider)) {
+      return current_as; // Return offending AS
+    }
+  }
+  return nullptr;
+}
+
 void Topology::FindRoutesTo(Router *target, VerbosityLevel verbosity) {
   ValidateDeployment();
   std::deque<Route *> routes;
 
-  if (verbosity >= VerbosityLevel::NORMAL) {
-
-    std::cout << "\n═══════════════════════════════════════\n";
-    std::cout << "Finding routes to AS" << target->ASNumber << "\n";
-    std::cout << "═══════════════════════════════════════\n\n";
-  }
-
   for (const auto &[neighborAS, neighbor] : target->neighbors_) {
     Route *route = target->OriginateRoute(neighbor.router);
     if (route) {
-      if (verbosity >= VerbosityLevel::NORMAL) {
-        std::cout << "📍 Originating route via AS" << neighbor.router->ASNumber << " ("
-                  << relationToString(neighbor.relation) << ")\n";
-      }
       routes.push_back(route);
     }
   }
@@ -182,36 +212,17 @@ void Topology::FindRoutesTo(Router *target, VerbosityLevel verbosity) {
     routes.pop_front();
     std::vector<Router *> neighbors;
     Router *finalRouter = route->path.back();
-    if (verbosity == VerbosityLevel::NORMAL) {
-      neighbors = finalRouter->LearnRoute(route, VerbosityLevel::NORMAL);
-    } else {
-      neighbors = finalRouter->LearnRoute(route);
-    }
-
-    if (!neighbors.empty()) {
-      pathCount++;
-      if (verbosity >= VerbosityLevel::NORMAL) {
-        std::cout << "\n🔄 Valid path #" << pathCount << " discovered:\n";
-        std::cout << "   " << route->ToString() << "\n";
-      }
-    }
+    neighbors = finalRouter->LearnRoute(route);
 
     for (Router *neighbor : neighbors) {
       Route *newRoute = finalRouter->ForwardRoute(route, neighbor);
       if (newRoute) {
-        if (verbosity >= VerbosityLevel::NORMAL) {
-          std::cout << "📍 AS" << finalRouter->ASNumber << " announcing route to AS"
-                    << neighbor->ASNumber << " ("
-                    << relationToString(finalRouter->GetRelation(neighbor)) << ")\n";
-        }
+        /*findLeakedRoute(*newRoute);*/
+        /*std::cout << "Valley-free check passed for route: " << newRoute->PathToString()*/
+        /*          << std::endl;*/
         routes.push_back(newRoute);
       }
     }
-  }
-
-  if (verbosity >= VerbosityLevel::NORMAL) {
-    std::cout << "\n✅ Route discovery complete: " << pathCount << " valid paths found\n";
-    std::cout << "═══════════════════════════════════════\n\n";
   }
 }
 

@@ -143,24 +143,12 @@ double RouteHijackExperiment::runTrial(const Trial &trial) {
   if (!topology_)
     throw std::runtime_error("Topology not initialized");
 
-  topology_->clearDeployment();
   topology_->clearRoutingTables();
-
-  // Fix the deployment strategy creation
-  std::unique_ptr<DeploymentStrategy> strategy;
-  if (deploymentType_ == "random") {
-    strategy = std::make_unique<RandomDeployment>(objectDeployment_, policyDeployment_);
-  } else {
-    strategy = std::make_unique<SelectiveDeployment>(objectDeployment_, policyDeployment_);
-  }
-
-  topology_->setDeploymentStrategy(std::move(strategy));
-  topology_->deploy();
 
   if (!trial.victim || !trial.attacker)
     return 0.0;
 
-  trial.attacker->proto = ProtocolFactory::Instance().CreateProtocol(trial.attacker->ASNumber);
+  // Run the hijack scenario
   topology_->FindRoutesTo(trial.victim.get());
   topology_->Hijack(trial.victim.get(), trial.attacker.get(), attackerHops_);
 
@@ -181,6 +169,21 @@ void RouteHijackExperiment::run() {
       objectDeployment_ = obj_pct;
       policyDeployment_ = pol_pct;
       current_config++;
+
+      topology_->clearDeployment();
+      std::unique_ptr<DeploymentStrategy> strategy;
+      if (deploymentType_ == "random") {
+        strategy = std::make_unique<RandomDeployment>(objectDeployment_, policyDeployment_);
+      } else if (deploymentType_ == "selective") {
+        strategy = std::make_unique<SelectiveDeployment>(objectDeployment_, policyDeployment_);
+      } else {
+        std::cout << "Wrong choice of deployment type, specify one of these <selective|random>"
+                  << std::endl;
+        throw std::runtime_error("Invalid deployment type");
+      }
+
+      topology_->setDeploymentStrategy(std::move(strategy));
+      topology_->deploy();
 
       // Update matrix progress
       double matrix_progress = (static_cast<double>(current_config) / total_configs) * 100;

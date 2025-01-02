@@ -1,4 +1,5 @@
 #include "plugins/leak/leak.hpp"
+#include "plugins/base/base.hpp"
 #include "router/relation.hpp"
 #include "router/route.hpp"
 #include "router/router.hpp"
@@ -31,8 +32,7 @@ bool LeakPolicyEngine::shouldPreferRoute(const Route &currentRoute, const Route 
   return false;
 }
 
-bool LeakPolicyEngine::canForwardRoute(Relation /*sourceRelation*/,
-                                       Relation /*targetRelation*/) const {
+bool LeakPolicyEngine::canForwardRoute(Relation sourceRelation, Relation targetRelation) const {
   return true; // Always forward - route leak
 }
 
@@ -76,31 +76,4 @@ std::string LeakProtocol::getDetailedProtocolInfo() const { return getProtocolIn
 
 std::pair<int, int> LeakProtocol::getDeploymentStats(const Topology & /*topology*/) const {
   return {0, 0};
-}
-
-void LeakDeploymentStrategy::deploy(Topology &topology) {
-  clear(topology);
-  for (const auto &[id, router] : topology.G->nodes) {
-    if (!router->proto ||
-        router->proto->getProtocolName() != "Route Leak Protocol Implementation") {
-      router->proto = std::make_unique<LeakProtocol>();
-    }
-  }
-}
-
-void LeakDeploymentStrategy::clear(Topology &topology) {
-  for (const auto &[id, router] : topology.G->nodes) {
-    router->proto = std::make_unique<LeakProtocol>();
-    router->routerTable.clear();
-  }
-}
-
-bool LeakDeploymentStrategy::validate(const Topology &topology) const {
-  for (const auto &[id, router] : topology.G->nodes) {
-    if (!router->proto ||
-        router->proto->getProtocolName() != "Route Leak Protocol Implementation") {
-      return false;
-    }
-  }
-  return true;
 }

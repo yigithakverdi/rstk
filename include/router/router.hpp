@@ -38,7 +38,8 @@ public:
          std::shared_ptr<RPKI> rpki)
       : ASNumber(ASNumber), Tier(Tier), proto(std::move(proto)), rpki(rpki) {
   }
-
+  
+  Route *GetRoute(int destinationAS) const;
   Relation GetRelation(Router *router);
   std::vector<Router *> LearnRoute(Route *route, VerbosityLevel verbosity = VerbosityLevel::QUIET);
   void ForceRoute(Route *route);

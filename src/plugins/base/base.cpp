@@ -40,14 +40,20 @@ bool BasePolicyEngine::shouldPreferRoute(const Route &currentRoute, const Route 
 }
 
 bool BasePolicyEngine::canForwardRoute(Relation sourceRelation, Relation targetRelation) const {
+  /*std::cout << "    Received source relation: " << relationToString(sourceRelation)*/
+  /*          << " (sourceRealtion)" << std::endl;*/
+  /*std::cout << "    Received target relation: " << relationToString(targetRelation)*/
+  /*          << " (targetRelation)" << std::endl;*/
   if (sourceRelation == Relation::Customer) {
+    /*std::cout << "    Source is customer and can forward to provider or peer" << std::endl;*/
     return true;
   }
 
   if (sourceRelation == Relation::Peer || sourceRelation == Relation::Provider) {
+    /*std::cout << "    Source is peer or provider and can forward if targetRelation is customer"*/
+    /*          << std::endl;*/
     return targetRelation == Relation::Customer;
   }
-
   return false;
 }
 

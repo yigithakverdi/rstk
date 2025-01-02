@@ -1,9 +1,9 @@
 #ifndef RLEAK_HPP
 #define RLEAK_HPP
 
+#include "cli/ui.hpp"
 #include "engine/experiments/experiments.hpp"
 #include "engine/topology/topology.hpp"
-#include "cli/ui.hpp"
 #include <memory>
 #include <queue>
 
@@ -13,9 +13,10 @@ public:
                       std::shared_ptr<Topology> topology, std::string deploymentType);
 
   // Experiment specific measurement methods
-  double calculateRouteLeakSuccess(std::shared_ptr<Router> attacker,
-                                   std::shared_ptr<Router> victim);
-  Router *findLeakedRoute(const Route *route);
+  double calculateRouteLeakSuccess(const std::shared_ptr<Topology>& topology, 
+                             Router* attacker, Router* victim);
+
+  Router *findLeakedRoute(const Route &route);
 
 protected:
   void initializeTrial() override;
@@ -35,7 +36,6 @@ private:
   std::vector<std::vector<double>> results;
   std::unique_ptr<ProgressDisplay> display;
   size_t matrix_size;
-
 };
 
 #endif // RCAIDA_HPP

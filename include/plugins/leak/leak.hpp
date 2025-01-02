@@ -1,6 +1,9 @@
 #pragma once
 
+#include "engine/topology/deployment.hpp"
 #include "engine/topology/topology.hpp"
+#include "plugins/aspa/aspa.hpp"
+#include "plugins/base/base.hpp"
 #include "plugins/plugins.hpp"
 #include "router/route.hpp"
 #include <functional>
@@ -30,10 +33,112 @@ public:
   std::pair<int, int> getDeploymentStats(const Topology &topology) const override;
 };
 
-class LeakDeploymentStrategy : public DeploymentStrategy {
+class RandomLeakDeployment : public DeploymentStrategy {
 public:
-  LeakDeploymentStrategy() = default;
-  void deploy(Topology &topology) override;
-  void clear(Topology &topology) override;
-  bool validate(const Topology &topology) const override;
+  RandomLeakDeployment(double objectPercentage, double policyPercentage)
+      : objectPercentage_(objectPercentage), policyPercentage_(policyPercentage) {}
+
+  void deploy(Topology &topology) override {
+    clear(topology);
+
+    size_t totalRouters = topology.G->nodes.size();
+    size_t objectCount = static_cast<size_t>(totalRouters * objectPercentage_ / 100.0);
+    size_t policyCount = static_cast<size_t>(totalRouters * policyPercentage_ / 100.0);
+
+    auto objectRouters = topology.RandomSampleRouters(objectCount);
+    auto policyRouters = topology.RandomSampleRouters(policyCount);
+
+    // Deploy ASPA with leak potential
+    for (const auto &router : policyRouters) {
+      router->proto = std::make_unique<ASPAProtocol>(topology.RPKIInstance);
+      if (auto aspaProto = dynamic_cast<ASPAProtocol *>(router->proto.get())) {
+        ASPAObject obj = ASPAProtocol::createObjectForRouter(router);
+        aspaProto->addASPAObject(obj);
+        aspaProto->updateUSPAS();
+      }
+    }
+
+    // Create ASPA objects for non-ASPA routers
+    for (const auto &router : objectRouters) {
+      if (!dynamic_cast<ASPAProtocol *>(router->proto.get())) {
+        ASPAProtocol::createObjectInRPKI(router, topology.RPKIInstance);
+      }
+    }
+  }
+
+  void clear(Topology &topology) override {
+    for (const auto &[id, router] : topology.G->nodes) {
+      if (auto aspaProto = dynamic_cast<ASPAProtocol *>(router->proto.get())) {
+        aspaProto->clearASPAObjects();
+      }
+    }
+    topology.RPKIInstance->USPAS.clear();
+  }
+
+  bool validate(const Topology &topology) const override {
+    return true; // Add actual validation if needed
+  }
+
+private:
+  double objectPercentage_;
+  double policyPercentage_;
+};
+
+class SelectiveLeakDeployment : public DeploymentStrategy {
+public:
+  SelectiveLeakDeployment(double objectPercentage, double policyPercentage)
+      : objectPercentage_(objectPercentage), policyPercentage_(policyPercentage) {}
+
+  void deploy(Topology &topology) override {
+    clear(topology);
+
+    auto routersByCustomerDegree = topology.GetByCustomerDegree();
+    size_t totalRouters = topology.G->nodes.size();
+    size_t totalObjectCount = static_cast<size_t>(totalRouters * objectPercentage_ / 100.0);
+    size_t totalPolicyCount = static_cast<size_t>(totalRouters * policyPercentage_ / 100.0);
+
+    std::vector<std::shared_ptr<Router>> objectTargets(
+        routersByCustomerDegree.begin(),
+        routersByCustomerDegree.begin() +
+            std::min(totalObjectCount, routersByCustomerDegree.size()));
+
+    std::vector<std::shared_ptr<Router>> policyTargets(
+        routersByCustomerDegree.begin(),
+        routersByCustomerDegree.begin() +
+            std::min(totalPolicyCount, routersByCustomerDegree.size()));
+
+    // Deploy ASPA protocols and objects
+    for (const auto &router : policyTargets) {
+      router->proto = std::make_unique<ASPAProtocol>(topology.RPKIInstance);
+      if (auto aspaProto = dynamic_cast<ASPAProtocol *>(router->proto.get())) {
+        ASPAObject obj = ASPAProtocol::createObjectForRouter(router);
+        aspaProto->addASPAObject(obj);
+        aspaProto->updateUSPAS();
+      }
+    }
+
+    // Create ASPA objects for non-ASPA routers
+    for (const auto &router : objectTargets) {
+      if (!dynamic_cast<ASPAProtocol *>(router->proto.get())) {
+        ASPAProtocol::createObjectInRPKI(router, topology.RPKIInstance);
+      }
+    }
+  }
+
+  void clear(Topology &topology) override {
+    for (const auto &[id, router] : topology.G->nodes) {
+      if (auto aspaProto = dynamic_cast<ASPAProtocol *>(router->proto.get())) {
+        aspaProto->clearASPAObjects();
+      }
+    }
+    topology.RPKIInstance->USPAS.clear();
+  }
+
+  bool validate(const Topology &topology) const override {
+    return true; // Add actual validation if needed
+  }
+
+private:
+  double objectPercentage_;
+  double policyPercentage_;
 };

@@ -1,4 +1,4 @@
-// Router.cpp
+// Router.cpptopolo
 #include <iostream>
 
 #include "plugins/manager.hpp"
@@ -23,6 +23,14 @@ Relation Router::GetRelation(Router *router) {
     }
   }
   return Relation::Unknown;
+}
+
+Route *Router::GetRoute(int destinationAS) const {
+  auto it = routerTable.find(destinationAS);
+  if (it != routerTable.end()) {
+    return it->second;
+  }
+  return nullptr;
 }
 
 // Function to convert Relation enum to string
@@ -100,38 +108,7 @@ std::vector<Router *> Router::LearnRoute(Route *route, VerbosityLevel verbosity)
     return {};
   }
 
-  if (verbosity == VerbosityLevel::NORMAL) {
-    // Add path validation visualization
-    std::cout << "\n┌─ Path Analysis for AS" << ASNumber << " ──────────\n";
-    std::cout << "│ Validating route to AS" << route->destination->ASNumber << "\n";
-  }
-
-  // Show hop-by-hop path with validation
-  if (verbosity == VerbosityLevel::NORMAL) {
-    std::cout << "├─ Path trace:\n";
-
-    for (size_t i = 0; i < route->path.size(); i++) {
-      Router *hop = route->path[i];
-      std::string status;
-      if (i < route->path.size() - 1) {
-        Router *nextHop = route->path[i + 1];
-        Relation rel = hop->GetRelation(nextHop);
-        // Check for valley-free violations
-        if (rel == Relation::Provider && i > 0) {
-          status = "🔴 Valley violation";
-        } else {
-          status = "🟢 Valid hop";
-        }
-      }
-      std::cout << "│  " << (i == route->path.size() - 1 ? "└" : "├") << "─ AS" << hop->ASNumber
-                << " (" << (i == 0 ? "Origin" : "Transit") << ") " << status << "\n";
-    }
-  }
-
   if (!proto->acceptRoute(*route)) {
-    if (verbosity == VerbosityLevel::NORMAL) {
-      std::cout << "└─ ❌ Route rejected by policy\n\n";
-    }
     return {};
   }
 
@@ -142,19 +119,31 @@ std::vector<Router *> Router::LearnRoute(Route *route, VerbosityLevel verbosity)
 
   routerTable[route->destination->ASNumber] = route;
 
-  // Determine which relations we can forward to
+  // First determine which relations we can forward to
+  std::set<Relation> forwardToRelations;
+  Router *currentAS = route->path.back();
+  Router *sourceAS = route->path[route->path.size() - 2];
+  Relation sourceRelation = currentAS->GetRelation(sourceAS);
+
+  /**/
+  /*std::cout << "Current AS: " << currentAS->ASNumber << std::endl;*/
+  /*std::cout << "Source AS: " << sourceAS->ASNumber << std::endl;*/
+  /*std::cout << "AS" << currentAS->ASNumber << " received route from AS" << sourceAS->ASNumber*/
+  /*          << " with relation: " << relationToString(sourceRelation) << std::endl;*/
+
+  // Only check neighbors we're actually connected to
   std::vector<Router *> neighborsToForward;
   for (const auto &[neighborAS, neighbor] : neighbors_) {
-    if (route->path.size() >= 2) {
-      // Correctly determine the sourceRelation as the relation between this
-      // router and the originator
-      Router *originatorAS = route->path[route->path.size() - 2];
-      Relation sourceRelation = GetRelation(originatorAS);
+    bool canForward = proto->canForwardTo(sourceRelation, neighbor.relation);
+    /*std::cout << "Checking if AS" << ASNumber << " can forward to AS" << neighborAS << " ("*/
+    /*          << relationToString(neighbor.relation) << "): " << (canForward ? "YES" : "NO")*/
+    /*          << std::endl;*/
 
-      if (proto->canForwardTo(sourceRelation, neighbor.relation)) {
-        neighborsToForward.push_back(neighbor.router);
-      } else {
-      }
+    if (canForward) {
+      /*std::cout << "AS" << ASNumber << " will forward to AS" << neighborAS*/
+      /*          << " because it received route from " << relationToString(sourceRelation)*/
+      /*          << " and neighbor is " << relationToString(neighbor.relation) << std::endl;*/
+      neighborsToForward.push_back(neighbor.router);
     }
   }
 
