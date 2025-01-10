@@ -33,7 +33,7 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV /home/yigit/workspace/github/rstk-worktree/rstk-refactor/.venv
+set -gx VIRTUAL_ENV /home/yigit/workspace/github/rstk/.venv
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"bin $PATH

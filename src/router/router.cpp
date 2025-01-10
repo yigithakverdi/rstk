@@ -1,212 +1,138 @@
-// Router.cpptopolo
+#include "router/router.hpp"
+#include "graph/graph.hpp"
+#include "proto/manager.hpp"
+#include "proto/proto.hpp"
+#include "router/route.hpp"
+#include "sstream"
 #include <iostream>
 
-#include "plugins/manager.hpp"
-#include "plugins/plugins.hpp"
-#include "router/relation.hpp"
-#include "router/route.hpp"
-#include "router/router.hpp"
-#include "sstream"
+router::router() : id_(""), tier_(0), proto_(nullptr), rpki_(nullptr) {}
+router::router(std::string id, std::string name, std::shared_ptr<graph<std::shared_ptr<router>>> g)
+    : id_(id), name_(name), graph_(g), tier_(0), proto_(nullptr), rpki_(nullptr) {}
+router::router(std::string id, std::string name, std::shared_ptr<graph<std::shared_ptr<router>>> g, int tier,
+               std::unique_ptr<IProto> proto, std::shared_ptr<rpki> rpki)
+    : id_(id), name_(name), graph_(g), tier_(tier), proto_(std::move(proto)), rpki_(rpki) {}
+router::~router() {}
+std::string router::getId() const { return id_; }
+int router::getTier() const { return tier_; }
+void router::setProtocol(std::unique_ptr<IProto> proto) { proto_ = std::move(proto); }
+void router::setTier(int tier) { tier_ = tier; }
+IProto *router::getProtocol() const { return proto_.get(); }
 
-Router::Router()
-    : ASNumber(0), Tier(0), proto(ProtocolFactory::Instance().CreateProtocol(ASNumber)),
-      rpki(nullptr) {}
+relation router::getRelation(router *r) const {
+  if (!graph_ || !r) {
+    return relation::unknown;
+  }
 
-Router::Router(int ASNumber)
-    : ASNumber(ASNumber), Tier(0), proto(ProtocolFactory::Instance().CreateProtocol(ASNumber)),
-      rpki(nullptr) {}
-
-Relation Router::GetRelation(Router *router) {
-  for (const auto &[asNum, neighbor] : neighbors_) {
-    if (neighbor.router == router) {
-      return neighbor.relation;
+  // Get neighbors and edge weight using graph API
+  auto neighbors = graph_->getNeighbors(id_);
+  for (const auto &[neighbor_id, weight] : neighbors) {
+    if (neighbor_id == r->getId()) {
+      // Convert weight to relation
+      if (weight > 0)
+        return relation::provider;
+      if (weight < 0)
+        return relation::customer;
+      return relation::peer;
     }
   }
-  return Relation::Unknown;
+  return relation::unknown;
 }
 
-Route *Router::GetRoute(int destinationAS) const {
-  auto it = routerTable.find(destinationAS);
-  if (it != routerTable.end()) {
-    return it->second;
+route *router::getRoute(std::string destination) const {
+  if (rtable_.find(destination) != rtable_.end()) {
+    return rtable_.at(destination);
   }
   return nullptr;
 }
 
-// Function to convert Relation enum to string
-std::string relationToString(Relation rel) {
-  switch (rel) {
-  case Relation::Customer:
-    return "Customer";
-  case Relation::Provider:
-    return "Provider";
-  case Relation::Peer:
-    return "Peer";
-  default:
-    return "Unknown";
+std::vector<router *> router::learnRoute(route *r) { return std::vector<router *>(); }
+
+void router::forceRoute(route *r) {
+  if (rtable_.find(r->getDestination()->getId()) != rtable_.end()) {
+    rtable_.erase(r->getDestination()->getId());
   }
+  rtable_.insert({r->getDestination()->getId(), r});
 }
 
-// Implementation of the toString method
-std::string Router::toString() const {
-  std::ostringstream oss;
-  oss << "Router Information:\n";
-  oss << "-------------------\n";
-  oss << "AS Number: " << ASNumber << "\n";
-  oss << "Tier: " << Tier << "\n";
-  oss << "Protocol: " << (proto ? proto->getProtocolName() : "None") << "\n";
-  oss << "RPKI: " << (rpki ? "Enabled" : "Disabled") << "\n";
-  oss << "Neighbors:\n";
-
-  if (neighbors_.empty()) {
-    oss << "  No neighbors.\n";
-  } else {
-    for (const auto &pair : neighbors_) {
-      int neighborAS = pair.first;
-      const Neighbor &neighbor = pair.second;
-      oss << "  - AS" << neighborAS << " (" << relationToString(neighbor.relation) << ")\n";
-    }
+void router::clearRTable() { rtable_.clear(); }
+route *router::originate(route *r) {
+  if (!r) {
+    return nullptr;
   }
 
-  oss << "Routing Table:\n";
-  if (routerTable.empty()) {
-    oss << "  No routes.\n";
-  } else {
-    for (const auto &routePair : routerTable) {
-      int destinationAS = routePair.first;
-      Route *route = routePair.second;
-      oss << "  - Destination AS" << destinationAS << ": ";
-      if (route) {
-        oss << "Path: [";
-        // Iterate in reverse to show forward path
-        for (int i = route->path.size() - 1; i >= 0; --i) {
-          oss << "AS" << route->path[i]->ASNumber;
-          // Show relationship between consecutive ASes
-          if (i > 0) {
-            Relation rel = route->path[i]->GetRelation(route->path[i - 1]);
-            oss << " -(" << relationToString(rel) << ")-> ";
-          }
-        }
-        oss << "]\n";
-      } else {
-        oss << "Invalid Route\n";
+  auto *new_route = new route();
+  new_route->setDestination(this);
+  new_route->setPath({this, r->getDestination()});
+  new_route->setAuthenticated(true);
+  new_route->setOriginValid(false);
+  new_route->setPathEndValid(true);
+
+  return new_route;
+}
+
+route *router::forward(route *r) {
+  if (!r) {
+    return nullptr;
+  }
+
+  auto *new_route = new route(*r);
+  auto current_path = r->getPath();
+  current_path.push_back(this);
+  new_route->setPath(current_path);
+  new_route->setOriginValid(false);
+  new_route->setPathEndValid(true);
+  new_route->setAuthenticated(true);
+
+  return new_route;
+}
+
+std::vector<router *> router::getPeers() {
+  std::vector<router *> peers;
+  auto neighbors = graph_->getNeighbors(id_);
+  for (const auto &[neighbor_id, weight] : neighbors) {
+    if (weight == 0) { // Peer relationship has weight of 0
+      if (auto r = graph_->getNode(neighbor_id)) {
+        peers.push_back(r.value().get());
       }
-    }
-  }
-
-  return oss.str();
-}
-
-// Overloaded operator<< implementation
-std::ostream &operator<<(std::ostream &os, const Router &router) {
-  os << router.toString();
-  return os;
-}
-
-std::vector<Router *> Router::LearnRoute(Route *route, VerbosityLevel verbosity) {
-  if (!route || ASNumber == route->destination->ASNumber) {
-    return {};
-  }
-
-  if (!proto->acceptRoute(*route)) {
-    return {};
-  }
-
-  auto existingRoute = routerTable.find(route->destination->ASNumber);
-  if (existingRoute != routerTable.end() && !proto->preferRoute(*existingRoute->second, *route)) {
-    return {};
-  }
-
-  routerTable[route->destination->ASNumber] = route;
-
-  // First determine which relations we can forward to
-  std::set<Relation> forwardToRelations;
-  Router *currentAS = route->path.back();
-  Router *sourceAS = route->path[route->path.size() - 2];
-  Relation sourceRelation = currentAS->GetRelation(sourceAS);
-
-  /**/
-  /*std::cout << "Current AS: " << currentAS->ASNumber << std::endl;*/
-  /*std::cout << "Source AS: " << sourceAS->ASNumber << std::endl;*/
-  /*std::cout << "AS" << currentAS->ASNumber << " received route from AS" << sourceAS->ASNumber*/
-  /*          << " with relation: " << relationToString(sourceRelation) << std::endl;*/
-
-  // Only check neighbors we're actually connected to
-  std::vector<Router *> neighborsToForward;
-  for (const auto &[neighborAS, neighbor] : neighbors_) {
-    bool canForward = proto->canForwardTo(sourceRelation, neighbor.relation);
-    /*std::cout << "Checking if AS" << ASNumber << " can forward to AS" << neighborAS << " ("*/
-    /*          << relationToString(neighbor.relation) << "): " << (canForward ? "YES" : "NO")*/
-    /*          << std::endl;*/
-
-    if (canForward) {
-      /*std::cout << "AS" << ASNumber << " will forward to AS" << neighborAS*/
-      /*          << " because it received route from " << relationToString(sourceRelation)*/
-      /*          << " and neighbor is " << relationToString(neighbor.relation) << std::endl;*/
-      neighborsToForward.push_back(neighbor.router);
-    }
-  }
-
-  return neighborsToForward;
-}
-
-void Router::ForceRoute(Route *route) { routerTable[route->destination->ASNumber] = route; }
-
-void Router::Clear() { routerTable.clear(); }
-
-Route *Router::OriginateRoute(Router *nextHop) {
-  if (!nextHop) {
-    return nullptr;
-  }
-
-  auto *route = new Route();
-  route->destination = this;     // Set destination as the originating router
-  route->path = {this, nextHop}; // Path includes both source and next hop
-  route->originValid = false;
-  route->pathEndInvalid = false;
-  route->authenticated = true;
-  return route;
-}
-
-Route *Router::ForwardRoute(Route *route, Router *nextHop) {
-  if (!route || !nextHop) {
-    std::cerr << "ForwardRoute: route or nextHop is null." << std::endl;
-    return nullptr;
-  }
-  auto *newRoute = new Route(*route);
-  newRoute->path.push_back(nextHop);
-  newRoute->originValid = false;
-  newRoute->pathEndInvalid = false;
-  newRoute->authenticated = true;
-  return newRoute;
-}
-
-std::vector<Neighbor> Router::GetPeers() {
-  std::vector<Neighbor> peers;
-  for (const auto &[asNum, neighbor] : neighbors_) {
-    if (neighbor.relation == Relation::Peer) {
-      peers.push_back(neighbor);
     }
   }
   return peers;
 }
 
-std::vector<Neighbor> Router::GetCustomers() {
-  std::vector<Neighbor> customers;
-  for (const auto &[asNum, neighbor] : neighbors_) {
-    if (neighbor.relation == Relation::Customer) {
-      customers.push_back(neighbor);
+std::vector<router *> router::getCustomers() {
+  std::vector<router *> customers;
+  auto neighbors = graph_->getNeighbors(id_);
+  for (const auto &[neighbor_id, weight] : neighbors) {
+    if (weight > 0) {
+      if (auto r = graph_->getNode(neighbor_id)) {
+        customers.push_back(r.value().get());
+      }
     }
   }
   return customers;
 }
 
-std::vector<Neighbor> Router::GetProviders() {
-  std::vector<Neighbor> providers;
-  for (const auto &[asNum, neighbor] : neighbors_) {
-    if (neighbor.relation == Relation::Provider) {
-      providers.push_back(neighbor);
+std::vector<router *> router::getProviders() {
+  std::vector<router *> providers;
+  auto neighbors = graph_->getNeighbors(id_);
+  for (const auto &[neighbor_id, weight] : neighbors) {
+    if (weight < 0) {
+      if (auto r = graph_->getNode(neighbor_id)) {
+        providers.push_back(r.value().get());
+      }
     }
   }
   return providers;
+}
+
+int router::getNumber() const {
+  std::string number = id_.substr(2);
+  return std::stoi(number);
+}
+
+std::string router::toString() const {
+  std::stringstream ss;
+  ss << "Router: " << id_ << " Tier: " << tier_ << " Proto: " << proto_->name();
+  return ss.str();
 }

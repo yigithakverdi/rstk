@@ -8,6 +8,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 # Enable compile_commands.json generation
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Add debug symbols
+set(CMAKE_BUILD_TYPE Debug)
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
+
+# Add at the top with other find_library calls
+find_package(PostgreSQL REQUIRED)
+find_library(PQXX_LIBRARY NAMES pqxx REQUIRED)
+find_path(PQXX_INCLUDE_DIR NAMES pqxx/pqxx PATH_SUFFIXES include)
+
+if(NOT PQXX_LIBRARY)
+    message(FATAL_ERROR "libpqxx library not found")
+endif()
+
 # Find readline package (do this once at the top level)
 find_library(READLINE_LIBRARY NAMES readline REQUIRED)
 find_library(HISTORY_LIBRARY NAMES history REQUIRED)
@@ -25,12 +38,22 @@ add_executable(rstk-refactor ${SOURCES})
 # Specify include directories for the main executable
 target_include_directories(rstk-refactor PRIVATE ${PROJECT_SOURCE_DIR}/include)
 
-# Link readline to main executable
+# For the main executable
+target_include_directories(rstk-refactor 
+    PRIVATE 
+    ${PROJECT_SOURCE_DIR}/include
+    ${PostgreSQL_INCLUDE_DIRS}
+    ${PQXX_INCLUDE_DIR}
+)
+
 target_link_libraries(rstk-refactor
     PRIVATE
     ${READLINE_LIBRARY}
     ${HISTORY_LIBRARY}
+    ${PostgreSQL_LIBRARIES}
+    ${PQXX_LIBRARY}
 )
+
 
 # Add Google Test
 include(FetchContent)
@@ -55,13 +78,22 @@ add_executable(rstk-tests ${TEST_SOURCES} ${SRC_SOURCES})
 # Specify include directories for tests
 target_include_directories(rstk-tests PRIVATE ${PROJECT_SOURCE_DIR}/include)
 
-# Link Google Test and readline to test executable
+# For the test executable
+target_include_directories(rstk-tests 
+    PRIVATE 
+    ${PROJECT_SOURCE_DIR}/include
+    ${PostgreSQL_INCLUDE_DIRS}
+    ${PQXX_INCLUDE_DIR}
+)
+
 target_link_libraries(rstk-tests
     PRIVATE
     gtest
     gtest_main
     ${READLINE_LIBRARY}
     ${HISTORY_LIBRARY}
+    ${PostgreSQL_LIBRARIES}
+    ${PQXX_LIBRARY}
 )
 
 # Add test

@@ -1,40 +1,38 @@
 #pragma once
+#ifndef ROUTE_HPP
+#define ROUTE_HPP
 
-#include "router.hpp"
-#include "router/relation.hpp"
 #include <string>
 #include <vector>
 
-class Route;
-class Router;
-
-class Route {
+class router;
+class route {
 public:
-  Router *destination = nullptr;
-  std::vector<Router *> path;
+  route();
+  ~route();
+  bool hasCycle() const;
+  void reversePath();
 
-  bool authenticated = false;
-  bool originValid = false;
-  bool pathEndInvalid = false;
+  std::string toString();
+  std::string toPathString();
 
-public:
-  Route();
-  Route(Router *destination, std::vector<Router *> path) : destination(destination), path(path) {}
-  bool ContainsCycle() const;
-  void ReversePath();
-  std::string PathToString() const;
-  std::string ToString() const;
+  const std::vector<router *> &getPath() const { return path; }
+  router *getDestination() const { return destination; }
+  bool isAuthenticated() const { return authenticated; }
+  bool isOriginValid() const { return originValid; }
+  bool isPathEndValid() const { return pathEndValid; }
+  void setPath(const std::vector<router *> &path) { this->path = path; }
+  void setDestination(router *destination) { this->destination = destination; }
+  void setAuthenticated(bool authenticated) { this->authenticated = authenticated; }
+  void setOriginValid(bool originValid) { this->originValid = originValid; }
+  void setPathEndValid(bool pathEndValid) { this->pathEndValid = pathEndValid; }
 
-  int CountPeerLinks() const {
-    int peer_links = 0;
-    for (size_t i = 0; i < path.size() - 1; ++i) {
-      if (path[i]->GetRelation(path[i + 1]) == Relation::Peer &&
-          path[i + 1]->GetRelation(path[i]) == Relation::Peer) {
-        peer_links++;
-      }
-    }
-    return peer_links;
-  }
-
-  bool IsValidValleyFree() const { return CountPeerLinks() <= 1; }
+private:
+  router *destination;
+  bool authenticated;
+  bool originValid;
+  bool pathEndValid;
+  std::vector<router *> path;
 };
+
+#endif // ROUTE_HPP

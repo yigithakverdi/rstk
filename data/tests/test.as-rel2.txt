@@ -1,5 +1,5 @@
-#			        ------ 1 -----
-#	           /       |      \
+#			  ------ 1 -----
+#	         /       |      \
 #           2 ------ 3       4
 #          /  \    /   \   /   \
 #         /    \  /     \ /     \
@@ -12,7 +12,6 @@
 #  17                                  18
 # <AS1>|<AS2>|<relationship>|<source>
 # <relationship>: 0 for peer, -1 for provider (AS1 as provider of AS2)
-
 1|2|-1|bgp
 1|3|-1|bgp
 1|4|-1|bgp

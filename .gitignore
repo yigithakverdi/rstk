@@ -1,5 +1,6 @@
 ignore
 build
+data
 
 # Ignore virtual environment
 .venv

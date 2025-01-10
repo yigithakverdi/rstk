@@ -1,4 +1,4 @@
-#!/home/yigit/workspace/github/rstk-worktree/rstk-refactor/.venv/bin/python3
+#!/home/yigit/workspace/github/rstk/.venv/bin/python3
 # -*- coding: utf-8 -*-
 import re
 import sys

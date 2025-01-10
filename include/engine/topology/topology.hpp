@@ -1,65 +1,51 @@
-// Topology.hpp
+#pragma once
 #ifndef TOPOLOGY_HPP
 #define TOPOLOGY_HPP
 
-#include "deployment.hpp"
 #include "engine/rpki/rpki.hpp"
+#include "engine/topology/deployment.hpp"
 #include "graph/graph.hpp"
-#include "logger/verbosity.hpp"
-#include "parser/parser.hpp"
-#include "router/relation.hpp"
 #include "router/router.hpp"
-
+#include "router/route.hpp"
 #include <memory>
-#include <string>
-#include <unordered_map>
-#include <vector>
 
-// Forward declarations
-class RouterController;
-class Topology;
-
-class Topology {
+class topology {
 public:
-  Topology(const std::vector<AsRel> &asRelsList, std::shared_ptr<RPKI> rpki);
-  ~Topology();
+  topology();
+  ~topology();
+  
+  void findRoutesTo(router *target);
+  void hijack(router *victim, router *attacker, int hops);
 
-  Route *CraftRoute(Router *victim, Router *attacker, int numberOfHops);
-
-  void setDeploymentTrue() { deployment_applied_ = true; }
-  void FindRoutesTo(Router *target, VerbosityLevel verbosity = VerbosityLevel::QUIET);
-  void Hijack(Router *victim, Router *attacker, int numberOfHops,
-              VerbosityLevel verbosity = VerbosityLevel::QUIET);
-
-  void PopulateNeighbors();
-  void assignNeighbors(const AsRel &asRel);
+  bool hasRouter(const std::string &asn) const;
+  bool hasDeployment() const;
+  
+  int getTier(const std::string &asn) const;
+  void setTier(const std::string &asn, int tier);
   void assignTiers();
-  void ValidateDeployment();
-  void setDeploymentStrategy(std::unique_ptr<DeploymentStrategy> strategy);
+
+  void setDeploymentStrategy(IDeployment &d);
   void deploy();
   void clearDeployment();
   void clearRoutingTables();
 
-  std::vector<std::shared_ptr<Router>> RandomSampleRouters(size_t count) const;
-  std::vector<std::shared_ptr<Router>> GetTierOne() const;
-  std::vector<std::shared_ptr<Router>> GetTierTwo() const;
-  std::vector<std::shared_ptr<Router>> GetTierThree() const;
-  std::vector<std::shared_ptr<Router>> GetByCustomerDegree() const;
-  std::shared_ptr<Router> GetRouter(int routerHash) const;
-  std::vector<Router *> RandomSampleExcluding(int count, Router *attacker);
-  std::string TopologyName;
-  std::unique_ptr<DeploymentStrategy> deploymentStrategy_;
+  std::vector<std::shared_ptr<router>> getByCustomerDegree() const;
+  std::vector<std::shared_ptr<router>> getTierOne() const;
+  std::vector<std::shared_ptr<router>> getTierTwo() const;
+  std::vector<std::shared_ptr<router>> getTierThree() const;
+  std::vector<std::shared_ptr<router>> getRandomRouters(size_t count) const;
+  std::shared_ptr<rpki> getRPKI() const;
 
+  std::shared_ptr<router> getRouter(const std::string &asn) const;
+  std::shared_ptr<route> getRoute(const router *source, const router *target) const;
+  std::shared_ptr<router> getRouterByASN(const std::string &asn) const;
+  std::shared_ptr<graph<std::shared_ptr<router>>> &getGraph();
+  
+  
 private:
-  Relation inverseRelation(Relation rel) const;
-  bool deployment_applied_ = false;
-
-public:
-  std::unique_ptr<Graph<std::shared_ptr<Router>>> G;
-  std::unordered_map<int, std::unordered_map<int, Edge>> PredMap;
-  std::unordered_map<int, std::unordered_map<int, Edge>> AdjMap;
-  std::string TopologyType;
-  std::shared_ptr<RPKI> RPKIInstance;
+  std::shared_ptr<graph<std::shared_ptr<router>>> graph_;
+  std::shared_ptr<rpki> rpki_;
+  std::shared_ptr<IDeployment> deploymentStrategy_;
 };
 
 #endif // TOPOLOGY_HPP

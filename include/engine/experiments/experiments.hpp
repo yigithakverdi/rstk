@@ -2,73 +2,39 @@
 #ifndef EXPERIMENTS_HPP
 #define EXPERIMENTS_HPP
 
-#include <chrono>
-#include <iostream>
-#include <memory>
+#include "engine/topology/topology.hpp"
 #include <queue>
-#include <sstream>
 #include <string>
 
-class Topology;
-class Router;
+class topology;
+class router;
+class route;
 
-struct Trial {
-  std::shared_ptr<Router> victim;
-  std::shared_ptr<Router> attacker;
+struct trial {
+  std::shared_ptr<router> victim;
+  std::shared_ptr<router> attacker;
 };
 
-class ExperimentWorker {
+class IExperiment {
 public:
-  ExperimentWorker(std::queue<Trial> &input_queue, std::queue<double> &output_queue,
-                   std::shared_ptr<Topology> topology);
-  virtual ~ExperimentWorker() = default;
-
-  void stop();
-
-  virtual void run();
-  virtual size_t calculateTotalTrials() const = 0;
-  virtual double runTrial(const Trial &trial) = 0;
-
-  std::queue<Trial> &input_queue_;
-  std::queue<double> &output_queue_;
-
-protected:
-  virtual void initializeTrial() = 0;
-  virtual bool setupTopology() { return (topology_ != nullptr); }
-
-  std::shared_ptr<Topology> topology_;
-  bool stopped_;
-
-  // Worker for parallel trail execution
-  static void threadWorker(std::shared_ptr<ExperimentWorker> worker);
-};
-
-class ExperimentProgress {
-public:
-  explicit ExperimentProgress(size_t total);
-
-  void update(size_t current);
-  std::string getBar();
-  std::string estimateTimeRemaining();
+  IExperiment(std::queue<trial> &input, std::queue<double> &output, std::shared_ptr<topology> t);
+  virtual ~IExperiment() = 0;
+  virtual void stop() = 0;
+  virtual void run() = 0;
+  virtual size_t total() const = 0;
+  virtual double runTrial(const trial &t) = 0;
+  virtual void init() = 0;
+  virtual void setupTopology() = 0;
 
 private:
   size_t total_;
   size_t current_{0};
-  std::chrono::steady_clock::time_point start_time_;
-  std::string formatDuration(int seconds) {
-    int hours = seconds / 3600;
-    seconds %= 3600;
-    int minutes = seconds / 60;
-    seconds %= 60;
-
-    std::stringstream ss;
-    if (hours > 0)
-      ss << hours << "h ";
-    if (minutes > 0)
-      ss << minutes << "m ";
-    ss << seconds << "s";
-    return ss.str();
-  }
+  std::chrono::steady_clock::time_point start_;
+  std::string formatDuration(int seconds);
+  std::queue<trial> &input_;
+  std::queue<double> &output_;
+  std::shared_ptr<topology> topology_;
+  bool stopped_{false};
 };
 
 #endif // EXPERIMENTS_HPP

@@ -1,35 +1,36 @@
-#include "cli/cli.hpp"
-#include "engine/engine.hpp"
-#include "engine/experiments/register.hpp"
+#include "engine/core.hpp"
+#include "engine/events/startup.hpp"
+#include "engine/pipeline/modules/topology/topo-loader.hpp"
+#include <chrono>
 #include <iostream>
+#include <thread>
 
-int main(int argc, char *argv[]) {
-  try {
-    // Initialize Engine with default configuration
-    EngineConfig config;
-    config.enable_rpki = true;
-    config.enable_logging = true;
+int main() {
+  engine e;
+  auto bus = e.getBus();
+  auto pipe = e.getPipeline();
 
-    auto &engine = Engine::Instance();
-    if (!engine.initialize(config)) {
-      throw std::runtime_error(engine.getLastError());
-    }
-
-    // Initialize experiments through Engine instead of directly
-    if (!engine.setUpExperiments()) {
-      throw std::runtime_error(engine.getLastError());
-    }
-
-    // Create and run CLI instance
-    CLI cli;
-    cli.run();
-
-    // Cleanup
-    engine.shutdown();
-    return 0;
-
-  } catch (const std::exception &e) {
-    std::cerr << "Fatal error: " << e.what() << std::endl;
+  if (!bus || !pipe) {
     return 1;
   }
+
+  bus->start();
+  pipe->start();
+
+  try {
+    auto startupEvt = std::make_shared<StartupEvent>("default");
+    bus->publish(startupEvt);
+
+    // Wait for all modules to complete
+    pipe->waitForCompletion().get();
+
+    // Now safe to stop
+    pipe->stop();
+    bus->stop();
+  } catch (const std::exception &e) {
+    std::cerr << "Error: " << e.what() << std::endl;
+    return 1;
+  }
+
+  return 0;
 }
