@@ -1,10 +1,11 @@
 #include "engine/topology/postop.hpp"
 #include "engine/topology/topology.hpp"
+#include "proto/base/deployment.hpp"
 
 postop::config::~config() {}
 
 void postop::rpkiconfig::configure(topology &t) {
-  auto& graph = t.getGraph();
+  auto &graph = t.getGraph();
   auto rpki = t.getRPKI();
 
   for (const auto &[asn, router] : graph->getNodes()) {
@@ -22,7 +23,7 @@ void postop::rpkiconfig::configure(topology &t) {
 }
 
 void postop::tierconfig::configure(topology &t) {
-  auto& graph = t.getGraph();
+  auto &graph = t.getGraph();
 
   for (const auto &[asn, router] : graph->getNodes()) {
     auto customers = router->getCustomers();
@@ -38,4 +39,10 @@ void postop::tierconfig::configure(topology &t) {
       router->setTier(3);
     }
   }
+}
+
+void postop::deploymentconfig::configure(topology &t) {
+  auto baseDeployment = std::make_shared<BaseDeployment>(t);
+  t.setDeploymentStrategy(baseDeployment);
+  t.deploy();
 }

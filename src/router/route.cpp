@@ -21,9 +21,9 @@ bool route::hasCycle() const {
 void route::reversePath() { std::reverse(path.begin(), path.end()); }
 std::string route::toString() {
   std::stringstream ss;
-  ss << "Route to " << destination->getId() << ":\n";
+  /*ss << "Route to " << destination->getId() << ": ";*/
   for (router *r : path) {
-    ss << "  " << r->getId() << "\n";
+    ss << r->getId() << " ";
   }
   return ss.str();
 }

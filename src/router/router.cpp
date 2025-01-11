@@ -19,20 +19,30 @@ void router::setProtocol(std::unique_ptr<IProto> proto) { proto_ = std::move(pro
 void router::setTier(int tier) { tier_ = tier; }
 IProto *router::getProtocol() const { return proto_.get(); }
 
+relation router::weightToRelation(int weight) {
+  relation rel;
+  if (weight > 0) {
+    rel = relation::customer;
+  } else if (weight < 0) {
+    rel = relation::provider;
+  } else {
+    rel = relation::peer;
+  }
+  return rel;
+}
+
 relation router::getRelation(router *r) const {
   if (!graph_ || !r) {
     return relation::unknown;
   }
 
-  // Get neighbors and edge weight using graph API
   auto neighbors = graph_->getNeighbors(id_);
   for (const auto &[neighbor_id, weight] : neighbors) {
     if (neighbor_id == r->getId()) {
-      // Convert weight to relation
       if (weight > 0)
-        return relation::provider;
-      if (weight < 0)
         return relation::customer;
+      if (weight < 0)
+        return relation::provider;
       return relation::peer;
     }
   }
@@ -46,7 +56,62 @@ route *router::getRoute(std::string destination) const {
   return nullptr;
 }
 
-std::vector<router *> router::learnRoute(route *r) { return std::vector<router *>(); }
+std::vector<router *> router::learnRoute(route *r) {
+  std::cout << "Recieved route: " << r->toString() << std::endl;
+  if (!r || r->getDestination()->getId() == id_) {
+    return {};
+  }
+
+  if (!proto_ || !proto_->accept(*r)) {
+    return {};
+  }
+
+  auto existing = getRoute(r->getDestination()->getId());
+  if (existing && !proto_->prefer(*existing, *r)) {
+    return {};
+  }
+
+  if (rtable_.find(r->getDestination()->getId()) != rtable_.end()) {
+    rtable_.erase(r->getDestination()->getId());
+  }
+  rtable_[r->getDestination()->getId()] = r;
+
+  std::unordered_set<int> validRelations;
+  for (const auto rel : {relation::customer, relation::peer, relation::provider}) {
+    bool canForward = proto_->forward(r, rel);
+    std::cout << "    Can forward (" << toString(rel) << "): " << canForward << std::endl;
+    if (canForward) {
+      validRelations.insert(static_cast<int>(rel));
+    }
+  }
+
+  std::vector<router *> forwardTo;
+  for (const auto &[neighbor_id, weight] : graph_->getNeighbors(id_)) {
+    relation rel = weightToRelation(weight);
+    std::cout << "    Neighbor: " << neighbor_id << " Relation: " << toString(static_cast<relation>(rel))
+              << std::endl;
+    if (validRelations.find(static_cast<int>(rel)) != validRelations.end()) {
+      if (auto node = graph_->getNode(neighbor_id)) {
+        forwardTo.push_back(node.value().get());
+      }
+    }
+  }
+  return forwardTo;
+}
+
+std::unordered_map<std::string, route *> router::getRTable() const { return rtable_; }
+std::string router::toString(relation r) const {
+  switch (r) {
+  case relation::customer:
+    return "customer";
+  case relation::peer:
+    return "peer";
+  case relation::provider:
+    return "provider";
+  default:
+    return "unknown";
+  }
+}
 
 void router::forceRoute(route *r) {
   if (rtable_.find(r->getDestination()->getId()) != rtable_.end()) {
@@ -56,42 +121,51 @@ void router::forceRoute(route *r) {
 }
 
 void router::clearRTable() { rtable_.clear(); }
-route *router::originate(route *r) {
-  if (!r) {
+route *router::originate(router *nextHop) {
+  if (!nextHop) {
     return nullptr;
   }
 
   auto *new_route = new route();
   new_route->setDestination(this);
-  new_route->setPath({this, r->getDestination()});
+  new_route->setPath({this, nextHop});
   new_route->setAuthenticated(true);
   new_route->setOriginValid(false);
   new_route->setPathEndValid(true);
-
   return new_route;
 }
 
-route *router::forward(route *r) {
-  if (!r) {
+route *router::forward(route *r, router *nextHop) {
+  if (!r || !nextHop) {
+    std::cerr << "ForwardRoute: route or nextHop is null" << std::endl;
     return nullptr;
   }
 
-  auto *new_route = new route(*r);
-  auto current_path = r->getPath();
-  current_path.push_back(this);
-  new_route->setPath(current_path);
-  new_route->setOriginValid(false);
-  new_route->setPathEndValid(true);
-  new_route->setAuthenticated(true);
+  auto *newRoute = new route(*r);
+  auto path = newRoute->getPath();
+  path.push_back(nextHop);
+  newRoute->setPath(path);
+  newRoute->setOriginValid(false);
+  newRoute->setPathEndValid(true);
+  newRoute->setAuthenticated(true);
+  return newRoute;
+}
 
-  return new_route;
+std::vector<router *> router::getNeighbors() {
+  std::vector<router *> neighbors;
+  for (const auto &[neighbor_id, _] : graph_->getNeighbors(id_)) {
+    if (auto node = graph_->getNode(neighbor_id)) {
+      neighbors.push_back(node.value().get());
+    }
+  }
+  return neighbors;
 }
 
 std::vector<router *> router::getPeers() {
   std::vector<router *> peers;
   auto neighbors = graph_->getNeighbors(id_);
   for (const auto &[neighbor_id, weight] : neighbors) {
-    if (weight == 0) { // Peer relationship has weight of 0
+    if (weight == 0) {
       if (auto r = graph_->getNode(neighbor_id)) {
         peers.push_back(r.value().get());
       }

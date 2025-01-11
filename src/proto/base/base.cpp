@@ -3,6 +3,7 @@
 #include "proto/proto.hpp"
 #include "router/route.hpp"
 #include "router/router.hpp"
+#include <iostream>
 
 BasePolicy::BasePolicy() { initRules(); };
 bool BasePolicy::validate(const route &r) const {
@@ -62,13 +63,19 @@ void BasePolicy::initRules() {
             {rules::nextHopASNumber, [this](const route &r) { return nextHopASNumber(r); }, false}};
 };
 
-bool BasePolicy::forward(relation source, relation target) const {
-  if (source == relation::customer) {
-    return true;
-  }
+bool BasePolicy::forward(route *r, relation rel) const {
+  router *final = r->getPath().back();
+  router *first = r->getPath()[r->getPath().size() - 2];
 
-  return (source == relation::customer) || (target == relation::customer);
-}
+  std::cout << "    Final AS: " << final->getId() << std::endl;
+  std::cout << "    First AS: " << first->getId() << std::endl;
+
+  relation firstHopRel = final->getRelation(first);
+
+  std::cout << "    Final AS (" << final->getId() << ")" << " is " << final->toString(firstHopRel)
+            << " to First AS (" << first->getId() << ")" << std::endl;
+  return firstHopRel == relation::customer || rel == relation::customer;
+};
 
 BaseProtocol::BaseProtocol() : IProto(std::make_unique<BasePolicy>()) {}
 std::string BaseProtocol::name() const { return "Base"; };

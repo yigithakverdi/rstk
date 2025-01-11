@@ -6,13 +6,15 @@
 #include <memory>
 #include <string>
 
+
+class router;
 class IProto {
 public:
   explicit IProto(std::unique_ptr<IPolicy> policy);
   virtual ~IProto();
   bool accept(const route &r) const;
   bool prefer(const route &r1, const route &r2) const;
-  bool forward(const std::string &source, const std::string &target) const;
+  bool forward(route *r, relation rel) const;
 
   virtual std::string name() const;
   virtual std::string info() const;

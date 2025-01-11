@@ -11,7 +11,7 @@ public:
   virtual ~IPolicy();
   virtual bool validate(const route& r) const;
   virtual bool prefer(const route& r1, const route& r2) const;
-  virtual bool forward(relation source, relation target) const;
+  virtual bool forward(route *r, relation rel) const;
 };
 
 

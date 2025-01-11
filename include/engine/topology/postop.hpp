@@ -17,4 +17,9 @@ public:
   public:
     void configure(topology &t) override;
   };
+
+  class deploymentconfig : public config {
+  public:
+    void configure(topology &t) override;
+  };
 };

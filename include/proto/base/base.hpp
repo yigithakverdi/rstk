@@ -13,7 +13,7 @@ public:
   explicit BasePolicy();
   bool validate(const route &r) const;
   bool prefer(const route &r1, const route &r2) const;
-  bool forward(relation source, relation target) const;
+  bool forward(route* r, relation rel) const;
   int localPreference(const route &r) const;
   int asPathLength(const route &r) const;
   int nextHopASNumber(const route &r) const;

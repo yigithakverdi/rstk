@@ -81,10 +81,15 @@ an intelligent reasoning layer, and a plugin-friendly interface—you shift from
 simple aggregator of functions to a robust, evolving system on par with the
 complexity and sophistication of modern engines."
 
-## Pipeline
-For pipeline there could be anchor events, these anchor events are necessary stages
-or modules that are "anchored" somewhere in the pipeline, such as sanity checks, 
-validation, or terminal stages, such as starting and ending module/stage of the
-pipline, this also could indicate finalizaiton of the program or some phase of the
-program
+## Pipeline For pipeline there could be anchor events, these anchor events are
+necessary stages or modules that are "anchored" somewhere in the pipeline, such
+as sanity checks, validation, or terminal stages, such as starting and ending
+module/stage of the pipline, this also could indicate finalizaiton of the
+program or some phase of the program
+
+## Caching Mechanisms
+There are bunch of cases where caching could be used, such as, one that comes to
+my mind is, calculating peers, providers and customers of a router, in each of
+the method I call `getNeighbors` from graph, this information can be cached for
+later usages, also whole neighbor information of a router is used as well
 

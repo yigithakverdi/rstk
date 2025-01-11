@@ -25,15 +25,17 @@ public:
   std::vector<router *> learnRoute(route *r);
   void forceRoute(route *r);
   void clearRTable();
-  route *originate(route *r);
-  route *forward(route *r);
+  route *originate(router *r);
+  route *forward(route *r, router *nextHop);
   std::vector<router *> getPeers();
   std::vector<router *> getProviders();
   std::vector<router *> getCustomers();
+  std::vector<router *> getNeighbors();
   std::string toString() const;
-  std::string getId() const;  
+  std::string getId() const;
   std::string getName() const;
   std::shared_ptr<rpki> getRPKI() const;
+  std::unordered_map<std::string, route *> getRTable() const;
   int getTier() const;
   int getNumber() const;
   void setProtocol(std::unique_ptr<IProto> proto);
@@ -41,6 +43,9 @@ public:
   void setRPKI(std::shared_ptr<rpki> rpki);
   void setName(std::string name);
   IProto *getProtocol() const;
+  relation weightToRelation(int weight);
+
+  std::string toString(relation r) const;
 
 private:
   std::unordered_map<std::string, route *> rtable_;

@@ -4,9 +4,11 @@
 
 BaseDeployment::BaseDeployment(topology &t) : IDeployment(t), t_(t) {}
 void BaseDeployment::deploy(topology &t) {
-  for (const auto &[id, router] : t.getGraph()->getNodes()) {
+  auto &graph = t.getGraph();
+  for (const auto &[id, router] : graph->getNodes()) {
     if (!router->getProtocol()) {
-      router->setProtocol(std::make_unique<BaseProtocol>());
+      auto baseProto = std::make_unique<BaseProtocol>();
+      router->setProtocol(std::move(baseProto));
     }
   }
 }

@@ -43,9 +43,7 @@ public:
     weight_compressed = static_cast<int8_t>(weight);
   }
 
-  std::pair<size_t, float> get() const {
-    return {target_id_hash, static_cast<float>(weight_compressed)};
-  }
+  std::pair<size_t, float> get() const { return {target_id_hash, static_cast<float>(weight_compressed)}; }
 };
 
 template <typename T> class echunk {
@@ -141,11 +139,8 @@ public:
   }
 
   std::vector<std::pair<std::string, float>> getNeighbors(const std::string &id) const {
-    // Create the vector outside the lock
     std::vector<std::pair<std::string, float>> neighbors;
-
     {
-      // Scope the lock
       std::shared_lock lock(mGraph);
 
       auto it = edges.find(id);
@@ -158,16 +153,16 @@ public:
         for (size_t i = 0; i < chunk->used; i++) {
           if (!chunk->deleted[i]) {
             auto [target_hash, weight] = chunk->edges[i].get();
-            // Store results in temporary variables outside the lock
             neighbors.emplace_back(getStringFromHash(target_hash), weight);
           }
         }
         chunk = chunk->next;
       }
-    } // Lock is released here
+    }
 
     return neighbors;
   }
+
   // The following functions provide batch operations for traversing and processing nodes and edges
   // in a thread-safe manner. These operations are designed to handle large-scale graph data efficiently
   // while ensuring consistency and synchronization through the use of shared locks.

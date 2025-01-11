@@ -3,8 +3,11 @@
 #include "database/queries.hpp"
 #include "engine/topology/deployment.hpp"
 #include "engine/topology/postop.hpp"
+#include "router/route.hpp"
 #include "router/router.hpp"
 #include <algorithm>
+#include <deque>
+#include <iostream>
 #include <random>
 
 std::shared_ptr<rpki> topology::getRPKI() const { return rpki_; }
@@ -14,6 +17,93 @@ std::shared_ptr<router> topology::getRouter(const std::string &asn) const {
     return nullptr;
   }
   return node.value();
+}
+
+route *topology::craftRoute(router *victim, router *attacker, int numberOfHops) {
+  std::vector<router *> path;
+
+  if (numberOfHops == 0) {
+    path.push_back(attacker);
+  } else if (numberOfHops == 1) {
+    path.push_back(victim);
+    path.push_back(attacker);
+  } else {
+    path.push_back(victim);
+    auto sampledRouters = getRandomRouters(numberOfHops - 1);
+    // Convert shared_ptr routers to raw pointers and exclude attacker
+    std::vector<router *> rawRouters;
+    std::copy_if(sampledRouters.begin(), sampledRouters.end(), std::back_inserter(rawRouters),
+                 [attacker](const auto &r) { return r.get() != attacker; });
+
+    path.insert(path.end(), rawRouters.begin(),
+                rawRouters.begin() + std::min(numberOfHops - 1, (int)rawRouters.size()));
+    path.push_back(attacker);
+  }
+
+  auto *newRoute = new route();
+  newRoute->setDestination(victim);
+  newRoute->setPath(path);
+  newRoute->setOriginValid(numberOfHops != 0);
+  newRoute->setPathEndValid(numberOfHops <= 1);
+  newRoute->setAuthenticated(false);
+  return newRoute;
+}
+
+void topology::hijack(router *victim, router *attacker, int numberOfHops) {
+  if (!hasDeployment()) {
+    throw std::runtime_error("No deployment strategy set");
+  }
+
+  route *badRoute = craftRoute(victim, attacker, numberOfHops);
+  if (!badRoute) {
+    throw std::runtime_error("Failed to craft bad route.");
+  }
+
+  std::deque<route *> routes;
+
+  try {
+    auto neighbors = graph_->getNeighbors(attacker->getId());
+    for (const auto &[neighbor_id, _] : neighbors) {
+      if (auto neighborRouter = getRouter(neighbor_id)) {
+        route *forwardedRoute = attacker->forward(badRoute, neighborRouter.get());
+        if (forwardedRoute) {
+          routes.push_back(forwardedRoute);
+        }
+      }
+    }
+
+    while (!routes.empty()) {
+      route *currentRoute = routes.front();
+      routes.pop_front();
+
+      if (currentRoute->getPath().empty()) {
+        std::cerr << "Route has an empty path. Skipping." << std::endl;
+        continue;
+      }
+
+      router *finalRouter = currentRoute->getPath().back();
+      if (!finalRouter) {
+        std::cerr << "Final router in route path is null. Skipping." << std::endl;
+        continue;
+      }
+
+      std::vector<router *> learnedNeighbors = finalRouter->learnRoute(currentRoute);
+      for (router *neighbor : learnedNeighbors) {
+        if (neighbor) {
+          route *forwardedRoute = finalRouter->forward(currentRoute, neighbor);
+          if (forwardedRoute) {
+            routes.push_back(forwardedRoute);
+          }
+        }
+      }
+    }
+
+  } catch (const std::exception &e) {
+    delete badRoute;
+    throw;
+  }
+
+  delete badRoute;
 }
 
 std::shared_ptr<route> topology::getRoute(const router *source, const router *target) const {
@@ -36,17 +126,40 @@ void topology::assignTiers() {
   }
 }
 
-// Inefficient way of obtaining the router from the graph instead there needs to be some
-// sort of mechanism to get router in O(1) time perhaps with a hash map.
-// std::shared_ptr<router> topology::getRouterByASN(const std::string &asn) const {
-//   for (const auto &[id, r] : graph_->getNodes()) {
-//     if (r->getName() == asn) {
-//       return r;
-//     }
-//   }
-//   return nullptr;
-// }
+void topology::print() const {
+  std::cout << "Topology Information:\n";
+  std::cout << "==================\n";
 
+  std::cout << "\nNodes by Tier:\n";
+  for (const auto &[id, r] : graph_->getNodes()) {
+    std::cout << "AS" << id << " (Tier " << r->getTier() << ")\n";
+
+    std::cout << "  Providers: ";
+    for (const auto *provider : r->getProviders()) {
+      std::cout << provider->getId() << " ";
+    }
+
+    std::cout << "\n  Peers: ";
+    for (const auto *peer : r->getPeers()) {
+      std::cout << peer->getId() << " ";
+    }
+
+    std::cout << "\n  Customers: ";
+    for (const auto *customer : r->getCustomers()) {
+      std::cout << customer->getId() << " ";
+    }
+    std::cout << "\n\n";
+  }
+
+  // Print summary statistics
+  std::cout << "\nSummary:\n";
+  std::cout << "Total ASes: " << graph_->getNodes().size() << "\n";
+  std::cout << "Tier 1 ASes: " << getTierOne().size() << "\n";
+  std::cout << "Tier 2 ASes: " << getTierTwo().size() << "\n";
+  std::cout << "Tier 3 ASes: " << getTierThree().size() << "\n";
+}
+
+std::shared_ptr<IDeployment> topology::getDeployment() const { return deploymentStrategy_; }
 topology::topology() {
 
   // Get all the nodes from the database, database configurations are done
@@ -87,6 +200,7 @@ topology::topology() {
   // Once all the topology information is loaded, we need to configure additional core
   // infrastructure related information to the routers, RPKI etc.
   std::vector<std::unique_ptr<postop::config>> postOpsChain;
+  postOpsChain.push_back(std::make_unique<postop::deploymentconfig>());
   postOpsChain.push_back(std::make_unique<postop::rpkiconfig>());
   postOpsChain.push_back(std::make_unique<postop::tierconfig>());
   for (const auto &config : postOpsChain) {
@@ -106,7 +220,7 @@ bool topology::hasDeployment() const { return deploymentStrategy_ != nullptr; }
 int topology::getTier(const std::string &asn) const {
   auto router = getRouter(asn);
   if (!router) {
-    throw std::runtime_error("Router not found for AS" + asn);
+    throw std::runtime_error("router not found for AS" + asn);
   }
 
   auto providers = router->getProviders();
@@ -122,22 +236,46 @@ int topology::getTier(const std::string &asn) const {
   return 3;
 }
 
-void findRoutesTo(router *target) {}
-void hijack(router *victim, router *attacker, int hops) {}
+void topology::printQueue(std::deque<route *> routes) {
+  for (route *r : routes) {
+    std::cout << r->toString() << std::endl;
+  }
+}
+
+void topology::findRoutesTo(router *target) {
+  std::deque<route *> routes;
+
+  for (router *neighbor : target->getNeighbors()) {
+    route *r = target->originate(neighbor);
+    routes.push_back(r);
+  }
+
+  while (!routes.empty()) {
+    route *curr = routes.front();
+    routes.pop_front();
+    std::vector<router *> neighbors;
+    router *finalRouter = curr->getPath().back();
+    neighbors = finalRouter->learnRoute(curr);
+
+    for (router *neighbor : neighbors) {
+      route *r = finalRouter->forward(curr, neighbor);
+      routes.push_back(r);
+    }
+    printQueue(routes);
+    std::cout << std::endl;
+  }
+}
 
 void topology::setTier(const std::string &asn, int tier) {
   auto router = getRouter(asn);
   if (!router) {
-    throw std::runtime_error("Router not found for AS" + asn);
+    throw std::runtime_error("router not found for AS" + asn);
   }
 
   router->setTier(tier);
 }
 
-void topology::setDeploymentStrategy(IDeployment &d) {
-  deploymentStrategy_ = std::shared_ptr<IDeployment>(&d);
-}
-
+void topology::setDeploymentStrategy(std::shared_ptr<IDeployment> d) { deploymentStrategy_ = d; }
 void topology::deploy() {
   if (!deploymentStrategy_) {
     throw std::runtime_error("Deployment strategy not set");

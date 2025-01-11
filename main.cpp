@@ -1,35 +1,22 @@
-#include "engine/core.hpp"
-#include "engine/events/startup.hpp"
-#include "engine/pipeline/modules/topology/topo-loader.hpp"
-#include <chrono>
+#include "engine/topology/topology.hpp"
 #include <iostream>
-#include <thread>
-
 int main() {
-  engine e;
-  auto bus = e.getBus();
-  auto pipe = e.getPipeline();
+  topology t;
+  auto r = t.getRouter("AS6");
+  std::cout << "Router protocol: " << r->getProtocol()->name() << std::endl;
+  std::cout << r->getId() << std::endl;
+  t.findRoutesTo(r.get());
 
-  if (!bus || !pipe) {
-    return 1;
+  std::cout << "Testing route tables:" << std::endl;
+  auto r18t = t.getRouter("AS18")->getRTable();
+  auto r4t = t.getRouter("AS4")->getRTable();
+
+  for (const auto &[dest, route] : r18t) {
+    std::cout << "AS6 via " << route->toString() << std::endl;
   }
 
-  bus->start();
-  pipe->start();
-
-  try {
-    auto startupEvt = std::make_shared<StartupEvent>("default");
-    bus->publish(startupEvt);
-
-    // Wait for all modules to complete
-    pipe->waitForCompletion().get();
-
-    // Now safe to stop
-    pipe->stop();
-    bus->stop();
-  } catch (const std::exception &e) {
-    std::cerr << "Error: " << e.what() << std::endl;
-    return 1;
+  for (const auto &[dest, route] : r4t) {
+    std::cout << "AS6 via " << route->toString() << std::endl;
   }
 
   return 0;

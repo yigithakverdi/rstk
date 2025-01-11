@@ -77,7 +77,71 @@ bool ASPAPolicy::forward(relation source, relation target) const {
   return (source == relation::customer) || (target == relation::customer);
 }
 
-result ASPAPolicy::performASPA(const route &r) const { return result::unknown; };
+result ASPAPolicy::performASPA(const route &r) const {
+  const auto &path = r.getPath();
+  if (path.size() < 2) {
+    throw std::runtime_error("Route length below verifiable!");
+  }
+
+  router *final = path.back();
+  router *firstHop = path[path.size() - 2];
+  relation rel = final->getRelation(firstHop);
+
+  if (rel == relation::customer || rel == relation::peer) {
+    if (path.size() == 2)
+      return result::valid;
+
+    for (size_t i = 0; i < path.size() - 2; i++) {
+      if (!hasASPA(path[i])) {
+        return result::unknown;
+      }
+    }
+
+    for (size_t i = 0; i < path.size() - 2; i++) {
+      if (!isProvider(path[i], path[i + 1])) {
+        return result::invalid;
+      }
+    }
+    return result::valid;
+  }
+
+  if (rel == relation::provider) {
+    if (path.size() <= 3)
+      return result::valid;
+
+    for (size_t i = 0; i < path.size() - 2; i++) {
+      if (!hasASPA(path[i])) {
+        return result::unknown;
+      }
+    }
+
+    size_t u_min = path.size();
+    size_t v_max = 0;
+
+    for (size_t i = 0; i < path.size() - 2; i++) {
+      if (!isProvider(path[i], path[i + 1])) {
+        u_min = i + 2;
+        break;
+      }
+    }
+
+    for (size_t i = path.size() - 2; i > 0; i--) {
+      if (!isProvider(path[i], path[i - 1])) {
+        v_max = i;
+        break;
+      }
+    }
+
+    if (u_min <= v_max) {
+      return result::invalid;
+    }
+
+    return result::valid;
+  }
+
+  return result::invalid;
+}
+
 void ASPAProtocol::updateUSPAS() {
   std::unordered_map<std::string, std::set<std::string>> customerProviders;
 
