@@ -19,6 +19,13 @@ void router::setProtocol(std::unique_ptr<IProto> proto) { proto_ = std::move(pro
 void router::setTier(int tier) { tier_ = tier; }
 IProto *router::getProtocol() const { return proto_.get(); }
 
+void router::printRTable() const {
+  std::cout << "Routing table for " << id_ << std::endl;
+  for (const auto &[dest, route] : rtable_) {
+    std::cout << "  " << dest << " -> " << route->toString() << std::endl;
+  }
+}
+
 relation router::weightToRelation(int weight) {
   relation rel;
   if (weight > 0) {
@@ -57,7 +64,7 @@ route *router::getRoute(std::string destination) const {
 }
 
 std::vector<router *> router::learnRoute(route *r) {
-  std::cout << "Recieved route: " << r->toString() << std::endl;
+  /*std::cout << "Recieved route: " << r->toString() << std::endl;*/
   if (!r || r->getDestination()->getId() == id_) {
     return {};
   }
@@ -79,7 +86,7 @@ std::vector<router *> router::learnRoute(route *r) {
   std::unordered_set<int> validRelations;
   for (const auto rel : {relation::customer, relation::peer, relation::provider}) {
     bool canForward = proto_->forward(r, rel);
-    std::cout << "    Can forward (" << toString(rel) << "): " << canForward << std::endl;
+    /*std::cout << "    Can forward (" << toString(rel) << "): " << canForward << std::endl;*/
     if (canForward) {
       validRelations.insert(static_cast<int>(rel));
     }
@@ -88,8 +95,8 @@ std::vector<router *> router::learnRoute(route *r) {
   std::vector<router *> forwardTo;
   for (const auto &[neighbor_id, weight] : graph_->getNeighbors(id_)) {
     relation rel = weightToRelation(weight);
-    std::cout << "    Neighbor: " << neighbor_id << " Relation: " << toString(static_cast<relation>(rel))
-              << std::endl;
+    /*std::cout << "    Neighbor: " << neighbor_id << " Relation: " << toString(static_cast<relation>(rel))*/
+    /*          << std::endl;*/
     if (validRelations.find(static_cast<int>(rel)) != validRelations.end()) {
       if (auto node = graph_->getNode(neighbor_id)) {
         forwardTo.push_back(node.value().get());

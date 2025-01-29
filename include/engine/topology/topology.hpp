@@ -40,7 +40,6 @@ public:
   std::shared_ptr<rpki> getRPKI() const;
   std::shared_ptr<IDeployment> getDeployment() const;
   route *craftRoute(router *victim, router *attacker, int hops);
-
   std::shared_ptr<router> getRouter(const std::string &asn) const;
   std::shared_ptr<route> getRoute(const router *source, const router *target) const;
   std::shared_ptr<router> getRouterByASN(const std::string &asn) const;

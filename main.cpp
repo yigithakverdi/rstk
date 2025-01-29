@@ -2,21 +2,21 @@
 #include <iostream>
 int main() {
   topology t;
-  auto r = t.getRouter("AS6");
-  std::cout << "Router protocol: " << r->getProtocol()->name() << std::endl;
-  std::cout << r->getId() << std::endl;
+  auto r = t.getRouter("AS1");
+
+  std::cout << "Route tables before hijack" << std::endl;
   t.findRoutesTo(r.get());
-
-  std::cout << "Testing route tables:" << std::endl;
-  auto r18t = t.getRouter("AS18")->getRTable();
-  auto r4t = t.getRouter("AS4")->getRTable();
-
-  for (const auto &[dest, route] : r18t) {
-    std::cout << "AS6 via " << route->toString() << std::endl;
+  for (const auto &[hash, weight] : t.getGraph()->getNodes()) {
+    t.getRouter(hash)->printRTable();
   }
-
-  for (const auto &[dest, route] : r4t) {
-    std::cout << "AS6 via " << route->toString() << std::endl;
+  
+  std::cout << std::endl;
+  std::cout << "Route tables after hijack" << std::endl;
+  router *victim = t.getRouter("AS1").get();
+  router *attacker = t.getRouter("AS6").get();
+  t.hijack(victim, attacker, 1);
+  for (const auto &[hash, weight] : t.getGraph()->getNodes()) {
+    t.getRouter(hash)->printRTable();
   }
 
   return 0;

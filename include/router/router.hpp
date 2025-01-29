@@ -34,6 +34,7 @@ public:
   std::string toString() const;
   std::string getId() const;
   std::string getName() const;
+  void printRTable() const;
   std::shared_ptr<rpki> getRPKI() const;
   std::unordered_map<std::string, route *> getRTable() const;
   int getTier() const;

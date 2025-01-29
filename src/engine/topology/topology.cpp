@@ -32,8 +32,11 @@ route *topology::craftRoute(router *victim, router *attacker, int numberOfHops) 
     auto sampledRouters = getRandomRouters(numberOfHops - 1);
     // Convert shared_ptr routers to raw pointers and exclude attacker
     std::vector<router *> rawRouters;
-    std::copy_if(sampledRouters.begin(), sampledRouters.end(), std::back_inserter(rawRouters),
-                 [attacker](const auto &r) { return r.get() != attacker; });
+    std::transform(sampledRouters.begin(), sampledRouters.end(), std::back_inserter(rawRouters),
+                   [attacker](const auto &r) { return (r.get() != attacker) ? r.get() : nullptr; });
+
+    // Remove any null pointers that were filtered out
+    rawRouters.erase(std::remove(rawRouters.begin(), rawRouters.end(), nullptr), rawRouters.end());
 
     path.insert(path.end(), rawRouters.begin(),
                 rawRouters.begin() + std::min(numberOfHops - 1, (int)rawRouters.size()));
@@ -55,6 +58,8 @@ void topology::hijack(router *victim, router *attacker, int numberOfHops) {
   }
 
   route *badRoute = craftRoute(victim, attacker, numberOfHops);
+  std::cout << "Hijacking route: " << badRoute->toString() << std::endl;
+
   if (!badRoute) {
     throw std::runtime_error("Failed to craft bad route.");
   }
@@ -261,8 +266,8 @@ void topology::findRoutesTo(router *target) {
       route *r = finalRouter->forward(curr, neighbor);
       routes.push_back(r);
     }
-    printQueue(routes);
-    std::cout << std::endl;
+    /*printQueue(routes);*/
+    /*std::cout << std::endl;*/
   }
 }
 
