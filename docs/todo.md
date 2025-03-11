@@ -1,56 +1,126 @@
-## Refactoring
-- [+] Use logger implementation (removed all logging temporarly, will
-  implementation it along the way when implementing CLI and other protocols and
-  implement the rest when deubgging problems especially for ASPA)
-- [+] Create an interactive CLI, with UI elements such as loading bar, spinners
-  etc.
-- [+] Implement ASCones and BGP-Sec (directly map them from Python)
-- [+] Provide an interactive, visualization of the following elements:
-- Viewing topology
-- Viewing routers (routing tables, protocols they are using, protocol state
-etc.)
-- More tidied up visualizaiton of logs, such as rather then showing all logs for
-whole routing operations with commands only inspect related routers routing
-operations logs
-- [+] Final refactoring on the experiment logic 
-- [+] Engine implementation and integreation to CLI
-- [+] Implement the whole CAIDA dataset, using the whole dataset
+## Simulation Enhancements
+Enhanced AS Behavior Modeling: To increase realism, the simulation could incorporate more complex inter-AS behaviors. For example, not all ASes adhere strictly to the simple customer→provider→customer forwarding model; some may have sibling relationships or apply selective export policies. Incorporating known routing policies (perhaps using data from PeeringDB or CAIDA’s relationships dataset) can make the ASPA/AS-Cones evaluation more robust. One extension could be modeling IXP Route Servers and their clients, since route leaks often occur via IXPs. ASPA proposals explicitly consider route-server contexts​ IETF.ORG, so simulating an IXP where the RS and participants use ASPA/AS-Cones could validate those concepts. Another behavior: allow certain ASes to drop or alter attributes (simulating misconfigurations that e.g. strip OTC or communities​ NLAB.ENGR.UCONN.EDU) to see if ASPA/AS-Cones still catch the leak. These nuanced behaviors help ensure the solution holds up in less-than-ideal conditions. If time permits, one could also simulate malicious ASPA misuse – e.g. an attacker that somehow obtains a valid AS and deliberately registers a misleading ASPA object (like falsely listing a large provider as its authorized provider). While RPKI’s trust model should prevent illegitimate records (one can only authorize one’s own providers​ MANRS.ORG), testing the system’s response to such edge cases could be insightful (perhaps the attack fails because the bogus relationship never exists in routing, but it’s worth considering). Overall, these extensions make the simulation more reflective of real-world BGP intricacies, which can strengthen the paper (or be mentioned as future work if not implemented).
 
-## General Things to Consider
-- [ ] Deployment strategies can be mediated through ProtocolFactory, currently
-ProtocolFactory do not have any usage under protocol instantiation, however
-`CreateProtocol` method under ProtocolFactory is a good place to mediate
-deployment strategies. This could be further aruged
-- [ ] Some of the test cases are considered under wrong context such as topology
-some of the test cases should be grouped or considered under ASPA tests, or some
-of the complex routing either should be under base test case or router test
-cases, though these categorization is not solid yet, test case outcomes should
-not changed after refactoring since context of the test will not change when
-moved from topology_test to aspa_test or base_test since the topology will be
-same anyway
-- [ ] `AdjMap` and `PredMap` are not utilized and not poopulated however they
-were accessed under the `Hijack` method, thus problems were occurring removed
-this usage under `Hijack` and using neighbor method, usage of these fields might
-or might not be needed in the future 
-- [ ] Later on a clean-up on where classes needs to recide and where they should
-be included from needed. For example, currently `topology.hpp` is cluttered too
-much with bunch of classes, these could be separated in their own respective
-header files later on
-- [ ] There might be need of `ResetPlugin`, `ResetPolicy` and `ResetProtocol`
-methods under topology to reset all routers plugins, policies and protocols
-- [ ] Protocol specific commands, such as when implementing a protocol, it's
-commands should be implemented under the protocol classes as well
-- [ ] Experiments could run on separate threads, and progress could be shown on
-the CLI row by row with progress bar for each
-- [ ] Currently origin authentication and path-end validation does not checked
-out or used in the experiments, these could be implemented as well and used
-under protocols such as BGP-Sec
+Correlate With Real RPKI / IRR Data Gather real ASPA or IRR data (once the ASPA standard is in production with some testbeds) and see how incomplete or contradictory it is. Then feed that “messy” data into your simulator to see how real-world partial adoption differs from your neat synthetic scenarios.
 
+If you can run your simulator with monthly topologies from CAIDA and compare the results across months or even years, you can show whether the flattening of the Internet (the “everyone peers with everyone at IXPs” phenomenon) changes the results for ASPA or AS-Cones.
 
-## Code Cleanup
-- [ ] Remove all the unused parts
-- [ ] Clean up the code, move implementations that don't belong to the class to
-  where it actually belongs
-- [ ] Engine needs to be refactored, it's currently a mess, and doesn't really
-  do the actualy responsabilities, it is a unecessary layer between experiments,
-  topology and router
+Also simulating RPKI realistaclly.
+
+Extend that data structure to incorporate a notion of correctness (or “quality”), representing whether the record is (a) entirely correct, (b) stale/outdated, or (c) compromised/falsely listing relationships.
+
+## Enhancements On the PP 
+Three-Way Classification with Preference: Instead of a binary valid/invalid (with unknown treated as neutral), we could explicitly rank states as Valid, Unknown-HighConfidence, Unknown-LowConfidence, and Invalid. For example, if a path is unknown only because one AS in the middle hasn’t registered (but all others check out), that might be “Unknown-HighConfidence” – likely legit, just incomplete data. If a path is unknown due to multiple missing records or contradictory hints, that’s “Unknown-LowConfidence”. Operators could then apply policies like: prefer HighConfidence unknowns over LowConfidence ones, and maybe de-prefer LowConfidence even relative to longer paths. This idea requires algorithms to quantify confidence (possibly by counting how many hops are verifiable vs not, or whether the unknown hop is a well-known non-adopter vs a totally unexpected ASN). It’s a bit heuristic, but it could reduce the chance of choosing a bad unknown path when a good unknown or valid alternative exists. 
+
+Conflict Resolution Policies: In some cases we might encounter conflicting data – e.g., AS A’s ASRA says B is not a neighbor (since B isn’t listed), but B’s ASPA lists A as a provider. Which do we believe? Algorithm A would side with B (thus not flagging the link), Algorithm B sides with A (flagging it). A refined model could incorporate context: if one of the records is very new or from an AS with a history of correct data vs the other is suspect, maybe weight them. However, that complicates validation. A simpler approach: pick algorithm B as the default (as argued) – i.e., treat conflicts by invalidating the link unless there’s mutual agreement. If that proves too strict in practice (we see many false invalids), one could introduce an “Alarm but not drop” mode for conflicts initially: raise a warning to the operators of A and B to sort it out. In other words, treat conflicting relationship info as something that should be resolved out-of-band, and in the meantime perhaps prefer other routes. This way, malicious conflicts (like a false listing) don’t silently get through, but also don’t immediately blackhole traffic – they trigger an investigation.
+
+Graceful Handling of Unknowns: Borrowing concepts from trust networks, one could introduce a grace period or “limited trust” for new announcements involving unknown links. For instance, when a route with an unknown adjacency appears, a router might temporarily accept it but also start a timer or enhanced monitoring. If that prefix flaps or if no others appear from that adjacency, it could be an attack – drop it. If it stabilizes or other corroborative routes appear, it’s likely legitimate. This is speculative and tricky to automate without causing harm, but it’s akin to intrusion detection systems that isolate anomalies unless proven benign.
+
+Community Signaling for Validation State: Perhaps routers could tag routes with a BGP community or attribute indicating the result of ASPA/ASRA validation (Valid/Invalid/Unknown, and maybe which link failed). This info could be passed to IBGP or even to neighbors (though one must be careful not to trust it blindly if neighbors could lie). Still, within an AS, tagging could allow network engineers to see how much of their routing table is unknown vs valid. In inter-AS contexts, if a route is unknown at one AS but becomes valid deeper in (due to that AS publishing missing records later), an update could reflect that. This is more about visibility than security, but better visibility helps refine policies – e.g., an ISP could set a policy: “if two routes tie, and one has the community for ‘fully valid path’ and the other ‘unknown segments’, pick the fully valid one.” This goes back to preferring known good paths.
+
+Adding a strict verification modes to close loopholes, for example on strict mode how the simulation/experiments and route convergance behave we can plot graphic of those as well
+
+Adaptive and Context-Aware Security Policies: Rather than a one-size-fits-all validation rule, we can design ASPA extensions that adjust based on network context and threat level. For example, an AS could maintain two modes: a permissive mode (if adoption is low or if it’s routing for a very important prefix where any connectivity is better than none) and a strict mode (if adoption is high or if a prefix is highly sensitive to hijacks). In permissive mode, the router might not drop an ASPA-invalid route outright but instead reduce its preference (local preference) so that it’s less likely to be chosen unless no valid route exists. In strict mode, it might aggressively filter anything even slightly suspicious. This adaptability can also be automated: if global monitors (like BGP leak detectors or RPKI monitors) report an ongoing hijack campaign, networks could temporarily tighten their policies (strict mode) to protect assets. Conversely, if an ASPA record is known to be outdated or an AS in the path is known as non-adopter, a router might treat the alert as less severe (permissive, to avoid overreacting). Another idea is path context profiling – taking into account the structure of the AS path beyond just pairwise relations. For instance, if a path claims to go through two large transit providers in a row (which normally would not happen in valley-free routing), even if each individual hop is allowed by someone’s ASPA, the overall pattern is suspect. A smart validator could have rules like “flag paths that contain provider→provider sequences” or multiple peer→peer hops, etc., and handle those more cautiously. Essentially, embed some policy knowledge of typical Internet routing patterns into the validation. This would catch scenarios where an attacker strings together relationships that are each valid locally but globally form an unlikely route. Historical BGP data could feed these policies – e.g. if a prefix has never been seen via a certain AS before, that route could be de-prioritized unless further validated. Adaptive policies could also mean learning from incidents: if an AS was involved in a leak or attack before, future routes involving that AS might be scrutinized more (a form of reputation or trust scoring). While care must be taken (to avoid unfairly penalizing an AS due to one incident), a mild form of reputation can add resilience – e.g. temporarily treat routes through recently flaky ASes as potentially unsafe. Another avenue is adapting to traffic importance: for critical services, an AS might only accept fully validated paths, but for less critical or backup routes, it might accept even unverifiable ones to maintain connectivity. In summary, moving away from a rigid accept/drop to a more nuanced decision process can improve both security and network stability during transition periods. It makes the system graceful under partial adoption – not all invalid routes are equal, and adaptive logic can distinguish a likely attack from a minor policy mismatch.
+
+Resilience in Low-Adoption Scenarios: A fundamental challenge for any new security mechanism is the chicken-and-egg of adoption. To encourage early adoption and still provide protection when few others have deployed it, we can introduce extensions that specifically boost robustness with sparse deployment. One concept is a cooperative detection network among early adopters. For instance, ASPA-adopting ASes could form an overlay (via a simple web API or BGP community signaling) to share information about invalid routes they’re seeing. If AS1 and AS2 are early adopters and detect an invalid path for a prefix, they could signal to each other or to a public repository. This could warn non-adopters indirectly (if they subscribe to such feeds) or encourage those on the fence to drop a route that multiple others have flagged as bogus. Essentially, it’s crowdsourcing the verification: even if one AS alone can’t be sure, the collective agreement of several ASPA-validating ASes could indicate a real hijack in progress. Another mechanism for low-adoption robustness is to integrate ASPA checks into route reflectors or route servers that serve many clients. For example, an IXP’s route server (if it supports ASPA/ASRA) could refuse to propagate invalid routes to all its participant ASes, shielding non-adopters on that exchange from bad routes. This way, even networks that haven’t deployed the feature get indirect protection. It’s an incremental deployment strategy: secure the hubs and common exchange points to amplify the benefits. Additionally, tools could be developed to simplify adoption for small networks – for instance, automated scripts to generate ASPA objects from your peeringDB or IRR data, reducing the effort barrier. Another idea is a graceful fallback: if an ASPA check fails but the route is otherwise RPKI-origin-valid, maybe temporarily accept it but periodically re-check or solicit confirmation (e.g. send a BGP community to the upstream asking for re-announcement with some validation tag). Such mechanisms could ensure that during early phases, security doesn’t come at the cost of massive reachability issues, thus making operators more willing to turn on validation. Over time, as adoption increases, these leniencies can be tightened. We could also propose a reverse ASPA for low adoption: an AS could publish not just “who is allowed to be my provider” (normal ASPA) but “who I intend to be my customers/peers”. Early on, maybe only few large networks do this, but it would allow a validator to catch route leaks even if the leaking customer didn’t publish – because the provider published that it shouldn’t be getting routes from certain ASes. This flips the data perspective and could be an optional add-on: essentially providers announcing “I will only accept routes from these ASes as customers; if you see me in a path with others behind me, it’s a leak.” This is conceptually like the OTC attribute but in a signed form. It could bolster security when not everyone participates, by letting those who do participate cover for others in the relationship.
+
+## Stress Test Additional Threat Modals
+Rapid Attacks (Announcements/Withdrawals): Attackers sometimes briefly announce a hijack, then withdraw, hoping to evade detection. Your time-stepped approach can show whether an always-on filter (like ASPA+AS-Cones) blocks even short-lived hijacks. If your simulation reveals that partial deployment filters out 80% of those ephemeral routes in under 10 seconds, that’s a compelling demonstration.
+
+By carefully splicing together authorized segments, the attacker creates a composite path that each adopting AS along the way sees as acceptable. For example, an attacker might prepend a sequence of ASes that individually are in each other’s provider lists, effectively faking a valid chain from the origin to itself. This kind of Frankenstein path could involve using throwaway AS numbers as well – e.g. the attacker could obtain or hijack a small ASN and establish it as a “customer” of a larger network (getting listed in that larger network’s ASPA record), then use that relationship in a fake path
+
+Attackers can also use policy loopholes: e.g., announce routes over BGP peering sessions rather than customer-provider ones to exploit different handling. In ASPA, an AS only lists providers; a peer leak might not be flagged unless peers are listed via ASRA. So an attacker might masquerade as a peer of the victim and leak the route to a provider network – if the provider network isn’t checking peer relationships (and base ASPA alone wouldn’t, though ASRA would if implemented), the leak propagates. Essentially, any “valley” path (misordered provider/peer/customer sequence) that isn’t explicitly caught by relationship data is a potential attack path. If even one AS in the valley is absent from the database (non-adopter or outdated info), the chain can break the check
+
+Multi-hop & Relay Exploitation: Attackers might exploit BGP intermediaries that do not themselves enforce path plausibility. A prime example is leveraging route servers at IXPs (Internet exchange points) or “transparent” routers. These entities often pass along routes without adding their ASN to the path (by design, route servers don’t appear in AS-paths). An attacker could feed a malicious route into a route server, which then distributes it to many participants. Each receiving network sees a path missing the route server (and possibly missing the attacker if first-AS was stripped)
+
+Another tactic is selective prefix deaggregation: an attacker could announce a more specific prefix (which will usually be preferred over a broader one) with a slightly suspect path. Even if some validators drop it, others that haven’t deployed path validation will accept the more specific and route traffic to the attacker. In that sense, an attacker can bypass protections by outranking legitimate routes on metrics other than path validity.
+
+## Deployment Scenario
+For instance, simulate ASPA vs. AS-Cones in isolation vs. together – since both use RPKI-stored relationship data, is there a synergy or redundancy if an AS deploys both?
+
+Another scenario might involve gradual adoption sequences: e.g. first a set of major cloud providers adopt, then IX route-servers, then access networks – tracking security improvements at each stage. Instead of static snapshots (e.g., “X% adopt now”), simulate or model adoption across time (e.g., 2025–2030).
+
+Evaluate your simulator over multiple real snapshots from CAIDA (e.g. different months or different vantage-point merges). Assess whether the difference in vantage point coverage changes your results drastically.
+
+Similarly, test heterogeneous adoption where only certain continents or business types (education networks, content providers, etc.) use ASPA/AS-Cones, revealing how attacks might reroute through non-adopting regions
+
+Feed your simulator real BGP updates from RouteViews or RIPE RIS, injecting route leaks or forged-origin attacks in the stream to see how ASPA or AS-Cones policies mitigate them in near-real conditions. Analyze the difference between your pure “graph-based” approach and an actual data-plane + control-plane feed.
+
+The Internet is rife with hidden links, IXP peerings, sibling relationships, route-server connections, partial or ephemeral peerings. Explore how “unknown” relationships hamper ASPA or AS-Cones. Then propose how your simulator (or a new algorithmic step) can fill in or approximate these unknown links and measure the effect on detection rate.
+
+Some AS might adopt only if its providers (or its peers) adopt first. Model conditional or incentive-based adoption, i.e. “If my provider has ASPA, I’ll also deploy.” Show how that changes the slope of the success rate vs. fraction of adopters.
+
+## Additional Metrics
+Metric: Plot how many ASes “see” or select the invalid route over time, comparing:
+
+- No path validation.
+- ASPA or AS-Cones alone.
+- Hybrid or improved approach.
+  
+Novelty: This yields a “time-to-containment” graph: under partial adoption, does the invalid route saturate half the network in 10 seconds or 90 seconds? Does a top-tier adopting ASPA stop the leak in 1–2 hops, limiting the affected region? These time-based results add a practical incident-response perspective that is rarely included in purely steady-state BGP security papers.
+
+Strategic attacker placements: Choosing transit providers that haven’t deployed defenses to bypass protections.
+
+False positive, false negative
+
+Another metric could be detection confidence: what fraction of invalid announcements are unmistakably identified versus left as “unknown” due to lack of data (ASPA yields states like Valid/Invalid/Unknown​
+CONFERENCE.APNIC.NET). Tracking the Unknown cases (where no ASPA info exists for some AS pair) can pinpoint where deployment gaps exist
+
+For instance, define a “route-leak impact score” – how far (in terms of AS hops or percentage of the Internet) a leaked route propagates before being stopped by ASPA/AS-Cones. This quantifies partial mitigation (not just success/fail). 
+
+How many ASPA/AS-Cone records must be created or maintained as deployment grows, or the memory/CPU impact on routers validating paths (even if roughly estimated). While ASPA records are lightweight (not adding per-announcement size overhead like some BGP attributes do​), a conference reviewer will appreciate seeing that operational feasibility is considered as a “security metric”
+
+Finally, consider metrics of incentive – such as the benefit an AS gains by deploying early. For example, quantify how much an early adopter protects its own traffic vs. just protecting others. If data shows that early adoption significantly reduces an AS’s exposure to bogus routes, that’s a compelling argument for deployment
+
+Track how many routes are incorrectly dropped (false positives) vs. how many illegitimate routes pass (false negatives) due to stale or incorrect relationship data.
+Compare these outcomes against a baseline “perfect data” run.
+
+For each AS or for each AS-adjacency, decide with some probability whether the record is correct, missing, or compromised. These probabilities can reflect a staleness rate (e.g., 2% of records are outdated) or a compromise rate (2% are maliciously altered).
+
+Impact on Routing Convergence & Stability: How does enforcing path plausibility affect BGP convergence time and routing stability?
+
+## Additional Point of Views or Point of Improvements on Novelty
+Game-Theoretic Modeling: Introducing a game-theoretic or economic perspective can deepen the analysis of deployment incentives. One could model each AS as a rational player deciding whether to deploy ASPA/AS-Cones, incurring some cost but reducing risk. The benefit of deploying is partially externalized (it protects others by filtering bad routes that would otherwise propagate​
+NLAB.ENGR.UCONN.EDU), which might lead to free-rider problems. A game-theoretic model (e.g. an adoption game or evolutionary game) can examine scenarios like: will voluntary adoption reach a stable equilibrium, or is coordination (e.g. industry agreements) needed to achieve widespread security? For instance, use a payoff matrix where an AS gets a payoff boost if it avoids route leaks (which deployment helps), but if too few others deploy, an attacker can simply circumvent them, reducing the benefit. This kind of analysis might reveal tipping points – e.g. “if at least X% of tier-1 providers adopt, it becomes in everyone else’s best interest to adopt”. Such insights, backed by game theory, would be a novel theoretical addition beyond existing simulations.
+
+Statistical Impact Analysis: Another theoretical enhancement is to perform a statistical or probabilistic analysis of ASPA/AS-Cones deployment. For example, model the probability that a random hijack is mitigated as a function of deployment rate. If we assume each AS independently adopts with probability p, one can derive the probability that an invalid route is filtered before reaching N percent of the network. This can be informed by known topology characteristics (e.g. path length distributions, which could be estimated from data). A statistical model might show, for instance, that even 20% deployment focused on top-tier networks can protect, say, 80% of ASes from seeing a given leak – quantifying the risk reduction. One could also analyze real Internet routing data (e.g. CAIDA AS relationships, RouteViews BGP dumps) to estimate how many invalid paths would have been caught if ASPA/AS-Cones were in place. This bridges theory with empirical evidence: you could statistically characterize past incidents, reinforcing the case for these mechanisms. For example, “Among X known route hijacks in the past 5 years, Y% involved valley paths or fake segments that ASPA/AS-Cones would invalidate – thus statistically, deployment would cut hijack success by Y%”. Such analysis provides a theoretical expected benefit. Including a model of deployment impact (even a simple analytical model) in addition to simulation results will impress reviewers by showing a deep understanding. It moves the work beyond “we simulated this and got that” to “we can explain and predict the outcomes theoretically as well.”
+
+Algorithmic Complexity and Optimization: On the theoretical side, one could also discuss the algorithmic aspects of implementing ASPA/AS-Cones at scale. For example, analyzing the complexity of the path-validation check (which in ASPA is essentially a lookup of each AS pair against the RPKI object database). This is theoretically O(n) per route (where n is path length) – which is much cheaper than BGPsec’s cryptographic validations. Emphasizing this with a theoretical analysis of worst-case overhead (and possibly proposing optimizations like caching validation results or using bitset representations of cones for faster lookup) can be a nice touch. While not strictly necessary for a security-focused paper, a brief theoretical note that “ASPA/AS-Cones validation is computationally efficient (linear in path length, and path lengths are bounded in practice) and amenable to incremental deployment”​ IETF.ORG gives a sense of completeness. If space permits, one could even propose a formal model of erroneous or missing data (since ASPA/AS-Cones rely on registered relationships): e.g. use probability q that a given AS’s records are outdated or incomplete, and analyze how that affects the “unknown” validation state ratio. This overlaps with statistical analysis, but in a theoretical vein.
+
+Designing the Error Model in Practice
+Single Parameter Error Model
+A simplest approach is to pick one probability (say, pError) that any given relationship record is “incorrect” or “missing.”
+
+For each AS relationship in the simulator’s adjacency list:
+
+Roll a random dice from 
+0..1
+0..1.
+If dice < pError, mark that relationship as incorrectly recorded in the RPKI.
+For ASPA: maybe the record omits the correct provider or lists a bogus provider in its place.
+
+For ASPAwN/ASRA: maybe it excludes a real neighbor or includes a fake one.
+Impact on validation:
+
+If a needed adjacency (the real one) is omitted from the record, it leads to a potential false positive (i.e., a legitimate route is dropped because “the neighbor isn’t in the record”).
+
+If a bogus neighbor is inserted, it can lead to false negatives (i.e., a malicious route gets accepted because “the record says yes” even though that neighbor is not real).
+This single-parameter approach is easy to implement yet demonstrates the effect of “record corruption.” By sweeping pError from 0% to, say, 10%, you get a sense of how robust your system is to incomplete or faulty data.
+
+Separate Models: Missing vs. Fake
+You can make it a bit more nuanced:
+
+pMissing: Probability that a legitimate adjacency is omitted.
+pFake: Probability that a new bogus adjacency gets added.
+
+For each AS, you can decide how many fakes to inject, or do it at the link level.
+This lets you measure false positives (due to missing legitimate edges) vs. false negatives (due to spurious/fake edges).
+
+Temporal Staleness Model (Optional)
+If you also want to model timeliness of updates (rather than just correctness):
+
+Each relationship in your simulator can have a “last updated timestamp” and a parameter for how quickly updates should propagate.
+
+Introduce a “stale threshold,” e.g. if the real relationship changed at time T, but the record hasn’t been updated by T+X hours, it’s stale.
+
+The BFS-based route propagation could proceed in discrete steps (time-based). At each step, let some fraction of the stale records get updated. Meanwhile, if a route arrives at a node with a stale record, it incorrectly decides “invalid neighbor!” or “valid neighbor!” depending on what the old data says.
